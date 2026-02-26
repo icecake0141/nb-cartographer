@@ -95,7 +95,7 @@ def choose_columns(headers: list[str]) -> dict[str, str | None]:
             headers, [r"terminationb.*type", r"sideb.*type", r"^btype$", r"endpb.*type"]
         ),
         "cable_id": find_column(headers, [r"^id$", r"cable.*id", r"^pk$", r"objectid"]),
-        "cable_label": find_column(headers, [r"^label$", r"cable.*label", r"name"]),
+        "cable_label": find_column(headers, [r"^label$", r"cable.*label", r"^name$"]),
         "cable_type": find_column(headers, [r"^type$", r"cable.*type", r"mediatype"]),
         "cable_color": find_column(headers, [r"^color$", r"cable.*color"]),
     }

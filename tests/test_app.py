@@ -85,11 +85,28 @@ class AppLogicTests(unittest.TestCase):
 
         nodes, edges = build_device_graph(rows)
 
-        self.assertEqual(len(nodes), 2)
+        self.assertEqual(len(nodes), 4)
         self.assertEqual(len(edges), 1)
         self.assertEqual(edges[0]["data"]["count"], 2)
         self.assertEqual(edges[0]["data"]["cable_type"], "Cat6")
         self.assertEqual(edges[0]["data"]["domain"], "power")
+        rack_nodes = [n for n in nodes if n["data"]["node_type"] == "rack"]
+        device_nodes = [n for n in nodes if n["data"]["node_type"] == "device"]
+        self.assertEqual(len(rack_nodes), 2)
+        self.assertEqual(len(device_nodes), 2)
+        self.assertTrue(all(d["data"].get("parent", "").startswith("rack::") for d in device_nodes))
+
+    def test_parse_cables_csv_does_not_use_termination_name_as_cable_label(self):
+        csv_bytes = (
+            "Termination A Device,Termination A Name,Termination B Device,Termination B Name,Type\n"
+            "sw1,xe-0/0/1,sw2,xe-0/0/2,Cat6\n"
+        ).encode("utf-8")
+
+        rows, columns = parse_cables_csv(csv_bytes)
+
+        self.assertEqual(len(rows), 1)
+        self.assertIsNone(columns["cable_label"])
+        self.assertEqual(rows[0].cable_label, "Cable-1")
 
     def test_resolve_data_path_rejects_traversal(self):
         with self.assertRaises(ValueError):
