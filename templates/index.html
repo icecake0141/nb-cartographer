@@ -342,7 +342,7 @@
           const deg = degreeMap();
           const devices = cy.nodes('node.device-summary');
           const ids = devices.map((n) => n.id());
-          const fixedHintRoles = new Set(['external', 'patch_panel', 'pdu', 'power_source', 'powered_device']);
+          const fixedHintRoles = new Set(['external', 'patch_panel', 'pdu', 'power_source']);
           const fixedRoleById = new Map();
 
           ids.forEach((id) => {
@@ -373,7 +373,11 @@
           );
 
           const candidateNeighbors = (id) => neighbors(id).filter((n) => !fixedRoleById.has(n));
-          const isServerLike = (id) => server.has(id) || fixedRoleById.get(id) === 'powered_device';
+          const isServerLike = (id) => {
+            if (server.has(id)) return true;
+            if (fixedRoleById.get(id) === 'powered_device') return true;
+            return cy.getElementById(id).data('role_hint') === 'powered_device';
+          };
           const hasName = (id, regex) => regex.test((cy.getElementById(id).data('label') || '').toLowerCase());
 
           candidates.forEach((id) => {
@@ -615,7 +619,7 @@
 
         function serverKeep() {
           const all = cy.elements();
-          const serverNodes = cy.nodes('node.device-summary[role = "server"], node.device-summary[role = "powered_device"]');
+          const serverNodes = cy.nodes('node.device-summary[role = "server"]');
           if (showServers.checked) {
             if (hiddenServerRacks.size === 0) return all;
             const hidden = serverNodes.filter((n) => hiddenServerRacks.has(n.data('rack') || ''));
@@ -703,7 +707,7 @@
         function buildRackFolders() {
           const racks = [
             ...new Set(
-              cy.nodes('node.device-summary[role = "server"], node.device-summary[role = "powered_device"]')
+              cy.nodes('node.device-summary[role = "server"]')
                 .map((n) => n.data('rack') || 'UNASSIGNED')
             )
           ].sort();
