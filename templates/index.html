@@ -21,11 +21,41 @@
       <p class="error">{{ error }}</p>
     {% endif %}
 
+    {% if recent_results %}
+      <section class="history">
+        <h2>保存済み結果</h2>
+        <table>
+          <thead><tr><th>ID</th><th>日時</th><th>元ファイル</th><th>ノード</th><th>ケーブル</th><th>操作</th></tr></thead>
+          <tbody>
+          {% for item in recent_results %}
+            <tr>
+              <td>{{ item.id }}</td>
+              <td>{{ item.created_at }}</td>
+              <td>{{ item.original_filename }}</td>
+              <td>{{ item.node_count }}</td>
+              <td>{{ item.edge_count }}</td>
+              <td>
+                <a href="{{ url_for('result_detail', result_id=item.id) }}">表示</a>
+                /
+                <a href="{{ url_for('download_file', result_id=item.id, kind='csv') }}">CSV</a>
+                /
+                <a href="{{ url_for('download_file', result_id=item.id, kind='graph') }}">JSON</a>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </section>
+    {% endif %}
+
     {% if graph_json %}
       <section class="meta">
-        <p>ノード数: <strong>{{ node_count }}</strong></p>
-        <p>ケーブル数: <strong>{{ edge_count }}</strong></p>
+        <p>集約ノード数(Device): <strong>{{ device_node_count }}</strong></p>
+        <p>集約リンク数(Device間): <strong>{{ device_edge_count }}</strong></p>
       </section>
+      {% if result_id %}
+        <p class="saved">保存済み Result ID: <strong>{{ result_id }}</strong>（後でこのページの「保存済み結果」から再表示できます）</p>
+      {% endif %}
 
       {% if type_legend %}
         <section class="legend">
@@ -62,16 +92,22 @@
       </details>
 
       <div id="cy"></div>
+      <section class="component-filter">
+        <label for="componentSelect">表示コンポーネント:</label>
+        <select id="componentSelect"></select>
+      </section>
 
       <details>
         <summary>接続一覧</summary>
         <table>
-          <thead><tr><th>A端点</th><th>B端点</th><th>ケーブル</th><th>Type</th><th>Color</th></tr></thead>
+          <thead><tr><th>A Device</th><th>A Interface</th><th>B Device</th><th>B Interface</th><th>ケーブル</th><th>Type</th><th>Color</th></tr></thead>
           <tbody>
           {% for r in rows %}
             <tr>
-              <td>{{ r.a_endpoint }}</td>
-              <td>{{ r.b_endpoint }}</td>
+              <td>{{ r.a_device }}</td>
+              <td>{{ r.a_interface }}</td>
+              <td>{{ r.b_device }}</td>
+              <td>{{ r.b_interface }}</td>
               <td>{{ r.cable_label }}</td>
               <td>{{ r.cable_type }}</td>
               <td><span class="swatch" style="--swatch: {{ r.cable_color }}"></span>{{ r.cable_color }}</td>
@@ -82,46 +118,111 @@
       </details>
 
       <script>
-        const elements = {{ graph_json | safe }};
-        const cy = cytoscape({
-          container: document.getElementById('cy'),
-          elements,
-          style: [
+        const deviceElements = {{ device_graph_json | safe }};
+        const select = document.getElementById('componentSelect');
+        let cy = null;
+        let comps = [];
+
+        function deviceStyle() {
+          return [
             {
-              selector: 'node',
+              selector: 'node.rack',
               style: {
-                'background-color': '#006d77',
+                'shape': 'round-rectangle',
+                'background-color': '#eef2ff',
+                'border-width': 2,
+                'border-color': '#4f46e5',
                 'label': 'data(label)',
-                'font-size': 10,
-                'color': '#132a13',
-                'text-background-color': '#ffffff',
-                'text-background-opacity': 0.9,
-                'text-background-padding': 2,
+                'text-valign': 'top',
+                'text-halign': 'center',
+                'font-size': 12,
+                'padding': '20px',
+              }
+            },
+            {
+              selector: 'node.device-summary',
+              style: {
+                'shape': 'round-rectangle',
+                'background-color': '#0f766e',
+                'color': '#ffffff',
+                'label': 'data(label)',
+                'font-size': 9,
+                'text-wrap': 'wrap',
+                'text-max-width': 100,
+                'width': 72,
+                'height': 28,
               }
             },
             {
               selector: 'edge',
               style: {
-                'width': 2,
-                'line-color': 'data(color)',
-                'target-arrow-shape': 'triangle',
-                'target-arrow-color': 'data(color)',
+                'width': 'mapData(count, 1, 8, 2, 6)',
+                'line-color': '#475569',
                 'curve-style': 'bezier',
                 'label': 'data(label)',
-                'font-size': 9,
+                'font-size': 8,
                 'text-background-color': '#fff',
-                'text-background-opacity': 1,
+                'text-background-opacity': 0.9,
                 'text-background-padding': 2,
               }
-            }
-          ],
+            },
+            { selector: '.filtered-out', style: { 'display': 'none' } }
+          ];
+        }
+
+        function buildComponents() {
+          comps = cy.elements('node.device-summary, edge').components();
+          comps.sort((a, b) => b.nodes().length - a.nodes().length);
+        }
+
+        function fillSelector() {
+          select.innerHTML = '';
+          const allOpt = document.createElement('option');
+          allOpt.value = 'all';
+          allOpt.textContent = `全体表示 (${comps.length} components)`;
+          select.appendChild(allOpt);
+          comps.forEach((comp, i) => {
+            const o = document.createElement('option');
+            o.value = String(i);
+            o.textContent = `Component ${i + 1} (dev:${comp.nodes().length}, edge:${comp.edges().length})`;
+            select.appendChild(o);
+          });
+        }
+
+        function applyComponentFilter(value) {
+          cy.elements().removeClass('filtered-out');
+          if (value === 'all') return;
+          const idx = Number(value);
+          const comp = comps[idx];
+          if (!comp) return;
+          const keep = comp.union(comp.nodes().parents());
+          cy.elements().difference(keep).addClass('filtered-out');
+          cy.fit(keep, 30);
+        }
+
+        cy = cytoscape({
+          container: document.getElementById('cy'),
+          elements: deviceElements,
+          style: deviceStyle(),
           layout: {
             name: 'cose',
             animate: false,
-            nodeRepulsion: 350000,
+            nodeRepulsion: 120000,
             idealEdgeLength: 140,
+            padding: 30,
+            numIter: 800,
           }
         });
+
+        buildComponents();
+        fillSelector();
+        if (comps.length > 1) {
+          select.value = '0';
+          applyComponentFilter('0');
+        } else {
+          select.value = 'all';
+        }
+        select.addEventListener('change', (e) => applyComponentFilter(e.target.value));
       </script>
     {% endif %}
   </main>

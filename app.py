@@ -1,27 +1,42 @@
 from __future__ import annotations
 
 import csv
+import datetime as dt
 import io
 import json
 import re
-from dataclasses import dataclass
+import sqlite3
+import uuid
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 from collections import Counter
 
-from flask import Flask, render_template, request
+from flask import Flask, abort, render_template, request, send_file
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent
+DATA_DIR = BASE_DIR / "data"
+UPLOAD_DIR = DATA_DIR / "uploads"
+RESULT_DIR = DATA_DIR / "results"
+DB_PATH = DATA_DIR / "results.db"
 
 
 @dataclass
 class CableRow:
-    a_endpoint: str
-    b_endpoint: str
-    cable_label: str
-    cable_type: str
-    cable_color: str
-    edge_label: str
-    raw: dict[str, Any]
+    a_device: str = ""
+    a_interface: str = ""
+    b_device: str = ""
+    b_interface: str = ""
+    a_endpoint: str = ""
+    b_endpoint: str = ""
+    cable_label: str = ""
+    cable_type: str = "Unknown"
+    cable_color: str = "#64748b"
+    edge_label: str = ""
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 def normalize(text: str) -> str:
@@ -71,6 +86,21 @@ def build_endpoint(device: str, port: str) -> str:
     return port
 
 
+def infer_device_interface(device: str, termination: str, side: str) -> tuple[str, str]:
+    dev = (device or "").strip()
+    term = (termination or "").strip()
+    if dev and term:
+        return dev, term
+    if dev and not term:
+        return dev, "(no-interface)"
+    if term:
+        m = re.match(r"^\s*([^:]+)\s*:\s*(.+)\s*$", term)
+        if m:
+            return m.group(1).strip(), m.group(2).strip()
+        return f"Unassigned-{side}", term
+    return f"Unknown-{side}", "(unknown-interface)"
+
+
 TYPE_PALETTE = [
     "#0f766e",
     "#2563eb",
@@ -81,6 +111,30 @@ TYPE_PALETTE = [
     "#4d7c0f",
     "#334155",
 ]
+
+
+def init_storage() -> None:
+    DATA_DIR.mkdir(exist_ok=True)
+    UPLOAD_DIR.mkdir(exist_ok=True)
+    RESULT_DIR.mkdir(exist_ok=True)
+    with sqlite3.connect(DB_PATH) as con:
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL,
+                original_filename TEXT NOT NULL,
+                upload_path TEXT NOT NULL,
+                graph_path TEXT NOT NULL,
+                rows_path TEXT NOT NULL,
+                node_count INTEGER NOT NULL,
+                edge_count INTEGER NOT NULL,
+                columns_json TEXT NOT NULL,
+                type_legend_json TEXT NOT NULL
+            )
+            """
+        )
+        con.commit()
 
 
 def stable_type_color(cable_type: str) -> str:
@@ -107,10 +161,13 @@ def parse_cables_csv(file_bytes: bytes) -> tuple[list[CableRow], dict[str, str |
     rows: list[CableRow] = []
 
     for idx, row in enumerate(reader, start=1):
-        a_device = row.get(columns["a_device"] or "", "") if columns["a_device"] else ""
-        a_port = row.get(columns["a_port"] or "", "") if columns["a_port"] else ""
-        b_device = row.get(columns["b_device"] or "", "") if columns["b_device"] else ""
-        b_port = row.get(columns["b_port"] or "", "") if columns["b_port"] else ""
+        raw_a_device = row.get(columns["a_device"] or "", "") if columns["a_device"] else ""
+        raw_a_port = row.get(columns["a_port"] or "", "") if columns["a_port"] else ""
+        raw_b_device = row.get(columns["b_device"] or "", "") if columns["b_device"] else ""
+        raw_b_port = row.get(columns["b_port"] or "", "") if columns["b_port"] else ""
+
+        a_device, a_port = infer_device_interface(raw_a_device, raw_a_port, "A")
+        b_device, b_port = infer_device_interface(raw_b_device, raw_b_port, "B")
 
         a_endpoint = build_endpoint(a_device, a_port)
         b_endpoint = build_endpoint(b_device, b_port)
@@ -138,6 +195,10 @@ def parse_cables_csv(file_bytes: bytes) -> tuple[list[CableRow], dict[str, str |
 
         rows.append(
             CableRow(
+                a_device=a_device,
+                a_interface=a_port,
+                b_device=b_device,
+                b_interface=b_port,
                 a_endpoint=a_endpoint or f"Unknown-A-{idx}",
                 b_endpoint=b_endpoint or f"Unknown-B-{idx}",
                 cable_label=cable_label,
@@ -152,22 +213,54 @@ def parse_cables_csv(file_bytes: bytes) -> tuple[list[CableRow], dict[str, str |
 
 
 def build_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    node_ids: set[str] = set()
-    nodes: list[dict[str, str]] = []
-    edges: list[dict[str, str]] = []
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    device_ids: set[str] = set()
+    interface_ids: set[str] = set()
+
+    def device_id(device_name: str) -> str:
+        return f"dev::{device_name}"
+
+    def interface_id(device_name: str, interface_name: str) -> str:
+        return f"if::{device_name}::{interface_name}"
 
     for i, row in enumerate(rows, start=1):
-        for endpoint in (row.a_endpoint, row.b_endpoint):
-            if endpoint not in node_ids:
-                node_ids.add(endpoint)
-                nodes.append({"data": {"id": endpoint, "label": endpoint}})
+        for dev_name, if_name in ((row.a_device, row.a_interface), (row.b_device, row.b_interface)):
+            dev_node_id = device_id(dev_name)
+            if dev_node_id not in device_ids:
+                device_ids.add(dev_node_id)
+                nodes.append(
+                    {
+                        "data": {
+                            "id": dev_node_id,
+                            "label": dev_name,
+                            "node_type": "device",
+                        },
+                        "classes": "device",
+                    }
+                )
+
+            if_node_id = interface_id(dev_name, if_name)
+            if if_node_id not in interface_ids:
+                interface_ids.add(if_node_id)
+                nodes.append(
+                    {
+                        "data": {
+                            "id": if_node_id,
+                            "parent": dev_node_id,
+                            "label": if_name,
+                            "node_type": "interface",
+                        },
+                        "classes": "interface",
+                    }
+                )
 
         edges.append(
             {
                 "data": {
                     "id": f"e{i}",
-                    "source": row.a_endpoint,
-                    "target": row.b_endpoint,
+                    "source": interface_id(row.a_device, row.a_interface),
+                    "target": interface_id(row.b_device, row.b_interface),
                     "label": row.edge_label,
                     "cable_label": row.cable_label,
                     "cable_type": row.cable_type,
@@ -179,26 +272,173 @@ def build_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list[dict[s
     return nodes, edges
 
 
+def build_device_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    device_nodes: set[str] = set()
+    rack_by_device: dict[str, str] = {}
+    pair_counter: dict[tuple[str, str], int] = {}
+    pair_types: dict[tuple[str, str], Counter[str]] = {}
+    pair_colors: dict[tuple[str, str], str] = {}
+
+    for row in rows:
+        dev_a = row.a_device
+        dev_b = row.b_device
+        if not dev_a or not dev_b:
+            continue
+        device_nodes.add(dev_a)
+        device_nodes.add(dev_b)
+        rack_by_device.setdefault(dev_a, (row.raw.get("Rack A", "") or "").strip())
+        rack_by_device.setdefault(dev_b, (row.raw.get("Rack B", "") or "").strip())
+
+        key = tuple(sorted((dev_a, dev_b)))
+        pair_counter[key] = pair_counter.get(key, 0) + 1
+        if key not in pair_types:
+            pair_types[key] = Counter()
+        pair_types[key][row.cable_type] += 1
+        pair_colors.setdefault(key, row.cable_color)
+
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+    rack_nodes: set[str] = set()
+
+    for dev in sorted(device_nodes):
+        rack = rack_by_device.get(dev, "") or "UNASSIGNED"
+        rack_id = f"rack::{rack}"
+        if rack_id not in rack_nodes:
+            rack_nodes.add(rack_id)
+            nodes.append(
+                {
+                    "data": {"id": rack_id, "label": rack, "node_type": "rack"},
+                    "classes": "rack",
+                }
+            )
+        nodes.append(
+            {
+                "data": {"id": f"dev::{dev}", "label": dev, "parent": rack_id, "node_type": "device"},
+                "classes": "device-summary",
+            }
+        )
+
+    for i, (pair, count) in enumerate(sorted(pair_counter.items()), start=1):
+        a, b = pair
+        top_type = pair_types[pair].most_common(1)[0][0] if pair_types[pair] else "Unknown"
+        edges.append(
+            {
+                "data": {
+                    "id": f"d{i}",
+                    "source": f"dev::{a}",
+                    "target": f"dev::{b}",
+                    "label": f"{count} links ({top_type})",
+                    "count": count,
+                    "color": pair_colors.get(pair, "#64748b"),
+                }
+            }
+        )
+
+    return nodes, edges
+
+
+def store_result(
+    *,
+    original_filename: str,
+    file_bytes: bytes,
+    rows: list[CableRow],
+    nodes: list[dict[str, Any]],
+    edges: list[dict[str, Any]],
+    columns: dict[str, str | None],
+    type_legend: list[dict[str, Any]],
+) -> int:
+    stamp = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    suffix = uuid.uuid4().hex[:8]
+    safe_name = secure_filename(original_filename) or "upload.csv"
+    upload_rel = Path("uploads") / f"{stamp}_{suffix}_{safe_name}"
+    graph_rel = Path("results") / f"{stamp}_{suffix}_graph.json"
+    rows_rel = Path("results") / f"{stamp}_{suffix}_rows.json"
+
+    (DATA_DIR / upload_rel).write_bytes(file_bytes)
+    (DATA_DIR / graph_rel).write_text(json.dumps(nodes + edges, ensure_ascii=False), encoding="utf-8")
+    (DATA_DIR / rows_rel).write_text(json.dumps([asdict(r) for r in rows], ensure_ascii=False), encoding="utf-8")
+
+    created_at = dt.datetime.now().isoformat(timespec="seconds")
+    with sqlite3.connect(DB_PATH) as con:
+        cur = con.execute(
+            """
+            INSERT INTO results (
+                created_at, original_filename, upload_path, graph_path, rows_path,
+                node_count, edge_count, columns_json, type_legend_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                created_at,
+                original_filename,
+                str(upload_rel),
+                str(graph_rel),
+                str(rows_rel),
+                len(nodes),
+                len(edges),
+                json.dumps(columns, ensure_ascii=False),
+                json.dumps(type_legend, ensure_ascii=False),
+            ),
+        )
+        con.commit()
+        return int(cur.lastrowid)
+
+
+def list_recent_results(limit: int = 20) -> list[dict[str, Any]]:
+    with sqlite3.connect(DB_PATH) as con:
+        con.row_factory = sqlite3.Row
+        rows = con.execute(
+            """
+            SELECT id, created_at, original_filename, node_count, edge_count
+            FROM results
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_result(result_id: int) -> dict[str, Any] | None:
+    with sqlite3.connect(DB_PATH) as con:
+        con.row_factory = sqlite3.Row
+        row = con.execute("SELECT * FROM results WHERE id = ?", (result_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def resolve_data_path(rel_path: str) -> Path:
+    path = (DATA_DIR / rel_path).resolve()
+    if DATA_DIR.resolve() not in path.parents and path != DATA_DIR.resolve():
+        raise ValueError("Invalid path.")
+    return path
+
+
 @app.get("/")
 def index() -> str:
-    return render_template("index.html")
+    return render_template("index.html", recent_results=list_recent_results())
 
 
 @app.post("/upload")
 def upload() -> str:
     file = request.files.get("csv_file")
     if not file or not file.filename:
-        return render_template("index.html", error="CSVファイルを選択してください。")
+        return render_template("index.html", error="CSVファイルを選択してください。", recent_results=list_recent_results())
+
+    file_bytes = file.read()
 
     try:
-        rows, columns = parse_cables_csv(file.read())
+        rows, columns = parse_cables_csv(file_bytes)
     except Exception as exc:
-        return render_template("index.html", error=f"CSV解析に失敗しました: {exc}")
+        return render_template("index.html", error=f"CSV解析に失敗しました: {exc}", recent_results=list_recent_results())
 
     if not rows:
-        return render_template("index.html", error="接続データを抽出できませんでした。列名を確認してください。")
+        return render_template(
+            "index.html",
+            error="接続データを抽出できませんでした。列名を確認してください。",
+            recent_results=list_recent_results(),
+        )
 
     nodes, edges = build_graph(rows)
+    device_nodes, device_edges = build_device_graph(rows)
     missing = [name for name, col in columns.items() if col is None and name in {"a_device", "a_port", "b_device", "b_port"}]
     type_counter = Counter(r.cable_type for r in rows)
     legend_map: dict[str, str] = {}
@@ -208,17 +448,90 @@ def upload() -> str:
         {"type": cable_type, "count": count, "color": legend_map.get(cable_type, "#64748b")}
         for cable_type, count in type_counter.most_common()
     ]
+    result_id = store_result(
+        original_filename=file.filename,
+        file_bytes=file_bytes,
+        rows=rows,
+        nodes=nodes,
+        edges=edges,
+        columns=columns,
+        type_legend=type_legend,
+    )
 
     return render_template(
         "index.html",
         graph_json=json.dumps(nodes + edges, ensure_ascii=False),
+        device_graph_json=json.dumps(device_nodes + device_edges, ensure_ascii=False),
         rows=rows,
         node_count=len(nodes),
         edge_count=len(edges),
+        device_node_count=len(device_nodes),
+        device_edge_count=len(device_edges),
         columns=columns,
         missing=missing,
         type_legend=type_legend,
+        result_id=result_id,
+        recent_results=list_recent_results(),
     )
+
+
+@app.get("/result/<int:result_id>")
+def result_detail(result_id: int) -> str:
+    record = get_result(result_id)
+    if not record:
+        abort(404)
+
+    graph_path = resolve_data_path(record["graph_path"])
+    rows_path = resolve_data_path(record["rows_path"])
+    if not graph_path.exists() or not rows_path.exists():
+        abort(404)
+
+    graph_json = graph_path.read_text(encoding="utf-8")
+    row_items = json.loads(rows_path.read_text(encoding="utf-8"))
+    rows = [CableRow(**item) for item in row_items]
+    device_nodes, device_edges = build_device_graph(rows)
+    columns = json.loads(record["columns_json"])
+    type_legend = json.loads(record["type_legend_json"])
+    missing = [name for name, col in columns.items() if col is None and name in {"a_device", "a_port", "b_device", "b_port"}]
+
+    return render_template(
+        "index.html",
+        graph_json=graph_json,
+        device_graph_json=json.dumps(device_nodes + device_edges, ensure_ascii=False),
+        rows=rows,
+        node_count=record["node_count"],
+        edge_count=record["edge_count"],
+        device_node_count=len(device_nodes),
+        device_edge_count=len(device_edges),
+        columns=columns,
+        missing=missing,
+        type_legend=type_legend,
+        result_id=result_id,
+        recent_results=list_recent_results(),
+    )
+
+
+@app.get("/files/<int:result_id>/<kind>")
+def download_file(result_id: int, kind: str):
+    record = get_result(result_id)
+    if not record:
+        abort(404)
+
+    if kind == "csv":
+        path = resolve_data_path(record["upload_path"])
+        download_name = record["original_filename"] or f"result-{result_id}.csv"
+    elif kind == "graph":
+        path = resolve_data_path(record["graph_path"])
+        download_name = f"result-{result_id}-graph.json"
+    else:
+        abort(404)
+
+    if not path.exists():
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=download_name)
+
+
+init_storage()
 
 
 if __name__ == "__main__":

@@ -139,3 +139,4 @@ Thumbs.db
 instance/
 secrets.json
 import/*
+data/

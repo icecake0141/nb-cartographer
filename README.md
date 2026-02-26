@@ -13,6 +13,13 @@ python app.py
 
 ブラウザで `http://localhost:8000` を開き、CSVをアップロードしてください。
 
+## 保存仕様（永続化）
+
+- 生成履歴のメタデータは `data/results.db` (SQLite) に保存
+- アップロードしたCSVは `data/uploads/` に保存
+- 生成した図データ（Cytoscape要素JSON）と行データは `data/results/` に保存
+- 画面上の「保存済み結果」テーブルから、過去結果の再表示・CSV/JSONダウンロードが可能
+
 ## 想定CSV列
 
 次のような列名を自動検出します（多少の揺らぎに対応）:
