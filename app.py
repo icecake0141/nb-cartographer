@@ -596,7 +596,11 @@ def build_drawio_xml(elements: list[dict[str, Any]], diagram_name: str) -> str:
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<mxfile host="app.diagrams.net">',
         f'  <diagram id="{uuid.uuid4().hex[:10]}" name="{escape(diagram_name)}">',
-        '    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1920" pageHeight="1080">',
+        (
+            '    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" '
+            'tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" '
+            'pageWidth="1920" pageHeight="1080">'
+        ),
         "      <root>",
         '        <mxCell id="0"/>',
         '        <mxCell id="1" parent="0"/>',
@@ -614,10 +618,12 @@ def build_drawio_xml(elements: list[dict[str, Any]], diagram_name: str) -> str:
         x = start_x + (idx - 1) % cols * gap_x
         y = start_y + (idx - 1) // cols * gap_y
         xml_parts.append(
-            f'        <mxCell id="{draw_id}" value="{escape(value)}" style="{drawio_node_style(role)}" vertex="1" parent="1">'
+            f'        <mxCell id="{draw_id}" value="{escape(value)}" '
+            f'style="{drawio_node_style(role)}" vertex="1" parent="1">'
         )
         xml_parts.append(
-            f'          <mxGeometry x="{x}" y="{y}" width="{node_w}" height="{node_h}" as="geometry"/>'
+            f'          <mxGeometry x="{x}" y="{y}" width="{node_w}" '
+            f'height="{node_h}" as="geometry"/>'
         )
         xml_parts.append("        </mxCell>")
 
@@ -632,7 +638,9 @@ def build_drawio_xml(elements: list[dict[str, Any]], diagram_name: str) -> str:
         color = str(data.get("color", "#475569"))
         domain = str(data.get("domain", "data"))
         xml_parts.append(
-            f'        <mxCell id="{draw_id}" value="{escape(label)}" style="{drawio_edge_style(domain, color)}" edge="1" parent="1" source="{src}" target="{dst}">'
+            f'        <mxCell id="{draw_id}" value="{escape(label)}" '
+            f'style="{drawio_edge_style(domain, color)}" edge="1" parent="1" '
+            f'source="{src}" target="{dst}">'
         )
         xml_parts.append('          <mxGeometry relative="1" as="geometry"/>')
         xml_parts.append("        </mxCell>")
@@ -815,7 +823,9 @@ def download_file(result_id: int, kind: str):
         row_items = json.loads(rows_path.read_text(encoding="utf-8"))
         rows = [CableRow(**item) for item in row_items]
         device_nodes, device_edges = build_device_graph(rows)
-        drawio_xml = build_drawio_xml(device_nodes + device_edges, diagram_name=f"Result-{result_id}")
+        drawio_xml = build_drawio_xml(
+            device_nodes + device_edges, diagram_name=f"Result-{result_id}"
+        )
         return send_file(
             io.BytesIO(drawio_xml.encode("utf-8")),
             as_attachment=True,
