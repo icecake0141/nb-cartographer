@@ -31,10 +31,10 @@ python app.py
 
 ## 一般ユーザ向けテストファイル
 
-- 公開サンプル: `samples/netbox_cables_sample.csv`
+- 公開サンプル: `samples/netbox_cables.csv`
 - ローカル作業用の投入先: `import/`（`.gitignore` で除外）
 
-公開サンプルで動作確認したい場合は、画面から `samples/netbox_cables_sample.csv` をそのままアップロードしてください。
+公開サンプルで動作確認したい場合は、画面から `samples/netbox_cables.csv` をそのままアップロードしてください。
 
 ## テスト / Lint / Format
 

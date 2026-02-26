@@ -217,13 +217,13 @@
               style: {
                 'shape': 'round-rectangle',
                 'background-color': '#eef2ff',
-                'border-width': 2,
+                'border-width': 3,
                 'border-color': '#a5b4fc',
                 'label': 'data(label)',
-                'font-size': 11,
+                'font-size': 17,
                 'text-valign': 'top',
                 'text-halign': 'center',
-                'padding': '20px',
+                'padding': '48px',
                 'color': '#1f2937',
               }
             },
@@ -232,17 +232,17 @@
               style: {
                 'shape': 'round-rectangle',
                 'background-color': '#0f766e',
-                'border-width': 2,
+                'border-width': 3,
                 'border-color': '#0b5f59',
                 'color': '#ffffff',
                 'label': 'data(label)',
                 'text-valign': 'center',
                 'text-halign': 'center',
-                'font-size': 9,
+                'font-size': 13,
                 'text-wrap': 'wrap',
-                'text-max-width': 110,
-                'width': 78,
-                'height': 30,
+                'text-max-width': 180,
+                'width': 148,
+                'height': 54,
               }
             },
             {
@@ -264,9 +264,9 @@
               style: {
                 'background-color': '#475569',
                 'border-color': '#334155',
-                'width': 68,
-                'height': 26,
-                'font-size': 8,
+                'width': 118,
+                'height': 46,
+                'font-size': 12,
               }
             },
             {
@@ -274,9 +274,9 @@
               style: {
                 'background-color': '#64748b',
                 'border-color': '#475569',
-                'width': 68,
-                'height': 26,
-                'font-size': 8,
+                'width': 118,
+                'height': 46,
+                'font-size': 12,
               }
             },
             {
@@ -285,8 +285,8 @@
                 'shape': 'hexagon',
                 'background-color': '#1d4ed8',
                 'border-color': '#1e3a8a',
-                'width': 84,
-                'height': 34,
+                'width': 148,
+                'height': 64,
               }
             },
             {
@@ -295,8 +295,8 @@
                 'shape': 'round-rectangle',
                 'background-color': '#a16207',
                 'border-color': '#92400e',
-                'width': 82,
-                'height': 30,
+                'width': 148,
+                'height': 54,
               }
             },
             {
@@ -305,8 +305,8 @@
                 'shape': 'rectangle',
                 'background-color': '#ea580c',
                 'border-color': '#c2410c',
-                'width': 74,
-                'height': 28,
+                'width': 120,
+                'height': 50,
               }
             },
             {
@@ -315,8 +315,8 @@
                 'shape': 'diamond',
                 'background-color': '#dc2626',
                 'border-color': '#991b1b',
-                'width': 76,
-                'height': 32,
+                'width': 126,
+                'height': 56,
               }
             },
             {
@@ -328,7 +328,7 @@
                 'control-point-distances': 'data(curve_offset)',
                 'control-point-weights': 0.5,
                 'label': 'data(label)',
-                'font-size': 8,
+                'font-size': 12,
                 'text-background-color': '#fff',
                 'text-background-opacity': 0.9,
                 'text-background-padding': 2,
@@ -480,8 +480,17 @@
           return positions;
         }
 
+        function fitVisibleWithMinZoom(elements, padding = 80, minZoom = 0.65) {
+          if (!elements || elements.empty()) return;
+          cy.fit(elements, padding);
+          if (cy.zoom() < minZoom) {
+            cy.zoom(minZoom);
+            cy.center(elements);
+          }
+        }
+
         function applyHierarchicalLayout() {
-          const width = Math.max(cy.width(), 2600);
+          const width = Math.max(cy.width(), 4800);
           const roleNodes = {
             external: cy.nodes('node.device-summary[role = "external"]').toArray(),
             patch_panel: cy.nodes('node.device-summary[role = "patch_panel"]').toArray(),
@@ -493,14 +502,14 @@
             server: cy.nodes('node.device-summary[role = "server"]').toArray(),
           };
           const yMap = {
-            external: 80,
-            patch_panel: 180,
-            core: 300,
-            leaf: 430,
-            pdu: 570,
-            power_source: 570,
-            powered_device: 690,
-            server: 690,
+            external: 140,
+            patch_panel: 360,
+            core: 620,
+            leaf: 900,
+            pdu: 1200,
+            power_source: 1200,
+            powered_device: 1480,
+            server: 1480,
           };
           const positions = {};
           const deg = degreeMap();
@@ -510,17 +519,17 @@
             .sort((a, b) => String(a).localeCompare(String(b)));
           const rackCenterMap = new Map();
           const rackWidthMap = new Map();
-          const rackMargin = 260;
+          const rackMargin = 560;
 
           const roleGap = {
-            external: 300,
-            patch_panel: 220,
-            core: 320,
-            leaf: 220,
-            power_source: 240,
-            pdu: 210,
-            powered_device: 170,
-            server: 170,
+            external: 460,
+            patch_panel: 420,
+            core: 540,
+            leaf: 430,
+            power_source: 440,
+            pdu: 420,
+            powered_device: 360,
+            server: 360,
           };
           const roleNodesMap = {
             external: roleNodes.external,
@@ -543,24 +552,24 @@
           });
 
           rackOrder.forEach((rack) => {
-            let required = 280;
+            let required = 520;
             Object.keys(roleNodesMap).forEach((role) => {
               const c = countByRackRole.get(`${rack}::${role}`) || 0;
-              if (c > 1) required = Math.max(required, (c - 1) * roleGap[role] + 220);
-              if (c === 1) required = Math.max(required, 240);
+              if (c > 1) required = Math.max(required, (c - 1) * roleGap[role] + 430);
+              if (c === 1) required = Math.max(required, 420);
             });
             rackWidthMap.set(rack, required);
           });
 
-          const totalWidth = rackOrder.reduce((acc, r) => acc + (rackWidthMap.get(r) || 280), 0) + rackMargin * Math.max(0, rackOrder.length - 1);
+          const totalWidth = rackOrder.reduce((acc, r) => acc + (rackWidthMap.get(r) || 520), 0) + rackMargin * Math.max(0, rackOrder.length - 1);
           let cursor = width / 2 - totalWidth / 2;
           rackOrder.forEach((rack) => {
-            const w = rackWidthMap.get(rack) || 280;
+            const w = rackWidthMap.get(rack) || 520;
             rackCenterMap.set(rack, cursor + w / 2);
             cursor += w + rackMargin;
           });
           const rackCenter = (rack) => rackCenterMap.get(rack) || width / 2;
-          const rackWidth = (rack) => rackWidthMap.get(rack) || 280;
+          const rackWidth = (rack) => rackWidthMap.get(rack) || 520;
 
           roleNodes.external.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
           const externalX = spreadX(roleNodes.external, width / 2, 360);
@@ -616,15 +625,28 @@
 
           for (const group of byRackAndBucket.values()) {
             group.nodes.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
-            const xs = spreadX(group.nodes, rackCenter(group.rack), 220);
+            const xs = spreadX(group.nodes, rackCenter(group.rack), 360);
             group.nodes.forEach((n) => {
               positions[n.id()] = { x: xs[n.id()], y: group.y };
             });
           }
 
-          roleNodes.core.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
-          const coreX = spreadX(roleNodes.core, width / 2, 320);
-          roleNodes.core.forEach((n) => { positions[n.id()] = { x: coreX[n.id()], y: yMap.core }; });
+          roleNodes.core.sort((a, b) => {
+            const rackCmp = String(a.data('rack') || '').localeCompare(String(b.data('rack') || ''));
+            if (rackCmp !== 0) return rackCmp;
+            return (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0);
+          });
+          const byRackCore = new Map();
+          roleNodes.core.forEach((n) => {
+            const rack = n.data('rack') || 'UNASSIGNED';
+            if (!byRackCore.has(rack)) byRackCore.set(rack, []);
+            byRackCore.get(rack).push(n);
+          });
+          for (const [rack, nodes] of byRackCore.entries()) {
+            const gap = Math.max(360, Math.floor((rackWidth(rack) - 220) / Math.max(1, nodes.length)));
+            const xs = spreadX(nodes, rackCenter(rack), gap);
+            nodes.forEach((n) => { positions[n.id()] = { x: xs[n.id()], y: yMap.core }; });
+          }
 
           roleNodes.leaf.sort((a, b) => {
             const rackCmp = String(a.data('rack') || '').localeCompare(String(b.data('rack') || ''));
@@ -638,7 +660,7 @@
             byRackLeaf.get(r).push(n);
           });
           for (const [r, nodes] of byRackLeaf.entries()) {
-            const gap = Math.max(170, Math.floor((rackWidth(r) - 120) / Math.max(1, nodes.length)));
+            const gap = Math.max(320, Math.floor((rackWidth(r) - 240) / Math.max(1, nodes.length)));
             const xs = spreadX(nodes, rackCenter(r), gap);
             nodes.forEach((n) => { positions[n.id()] = { x: xs[n.id()], y: yMap.leaf }; });
           }
@@ -663,39 +685,50 @@
               byRack.get(rack).push(n);
             });
             for (const [rack, rackNodes] of byRack.entries()) {
-              const dynGap = Math.max(Math.floor(gap * 0.7), Math.floor((rackWidth(rack) - 100) / Math.max(1, rackNodes.length)));
+              const dynGap = Math.max(Math.floor(gap * 0.85), Math.floor((rackWidth(rack) - 220) / Math.max(1, rackNodes.length)));
               const xs = spreadX(rackNodes, leafCenter(rack), dynGap);
+              const center = rackCenter(rack);
+              const half = Math.max(180, (rackWidth(rack) - 140) / 2);
               rackNodes.forEach((n) => {
-                positions[n.id()] = { x: xs[n.id()], y: yMap[roleName] };
+                const clampedX = Math.max(center - half, Math.min(center + half, xs[n.id()]));
+                positions[n.id()] = { x: clampedX, y: yMap[roleName] };
               });
             }
           };
 
-          placeByRack(roleNodes.power_source, "power_source", 240);
-          placeByRack(roleNodes.pdu, "pdu", 210);
-          placeByRack(roleNodes.powered_device, "powered_device", 180);
-          placeByRack(roleNodes.server, "server", 180);
+          placeByRack(roleNodes.power_source, "power_source", 420);
+          placeByRack(roleNodes.pdu, "pdu", 400);
+          placeByRack(roleNodes.powered_device, "powered_device", 340);
+          placeByRack(roleNodes.server, "server", 340);
 
           cy.layout({
             name: 'preset',
             positions: (node) => positions[node.id()] || node.position(),
             animate: false,
-            fit: true,
-            padding: 40,
+            fit: false,
+            padding: 80,
           }).run();
 
           // Fine collision avoidance within the same horizontal band.
           ['external', 'patch_panel', 'core', 'leaf', 'power_source', 'pdu', 'powered_device', 'server'].forEach((role) => {
-            const nodes = cy.nodes(`node.device-summary[role = "${role}"]`).sort((a, b) => a.position('x') - b.position('x'));
-            const minGap = role === 'server' || role === 'powered_device' ? 180 : 250;
-            for (let i = 1; i < nodes.length; i++) {
-              const prev = nodes[i - 1];
-              const cur = nodes[i];
-              const dx = cur.position('x') - prev.position('x');
-              if (dx < minGap) cur.position('x', prev.position('x') + minGap);
+            const grouped = new Map();
+            cy.nodes(`node.device-summary[role = "${role}"]`).forEach((n) => {
+              const bucket = role === 'external' ? '__global__' : (n.data('rack') || 'UNASSIGNED');
+              if (!grouped.has(bucket)) grouped.set(bucket, []);
+              grouped.get(bucket).push(n);
+            });
+            const minGap = role === 'server' || role === 'powered_device' ? 320 : 420;
+            for (const nodes of grouped.values()) {
+              nodes.sort((a, b) => a.position('x') - b.position('x'));
+              for (let i = 1; i < nodes.length; i++) {
+                const prev = nodes[i - 1];
+                const cur = nodes[i];
+                const dx = cur.position('x') - prev.position('x');
+                if (dx < minGap) cur.position('x', prev.position('x') + minGap);
+              }
             }
           });
-          cy.fit(cy.elements(':visible'), 40);
+          fitVisibleWithMinZoom(cy.elements(':visible'), 80, 0.68);
           assignEdgeCurves();
         }
 
@@ -705,14 +738,22 @@
           if (!count) return;
           const densityFactor = count <= 24 ? 1.8 : count <= 48 ? 1.4 : 1.0;
           ['external', 'patch_panel', 'core', 'leaf', 'power_source', 'pdu', 'powered_device', 'server'].forEach((role) => {
-            const nodes = cy.nodes(`node.device-summary[role = "${role}"]:visible`).sort((a, b) => a.position('x') - b.position('x'));
-            const baseGap = role === 'server' || role === 'powered_device' ? 180 : 250;
+            const grouped = new Map();
+            cy.nodes(`node.device-summary[role = "${role}"]:visible`).forEach((n) => {
+              const bucket = role === 'external' ? '__global__' : (n.data('rack') || 'UNASSIGNED');
+              if (!grouped.has(bucket)) grouped.set(bucket, []);
+              grouped.get(bucket).push(n);
+            });
+            const baseGap = role === 'server' || role === 'powered_device' ? 320 : 420;
             const minGap = Math.floor(baseGap * densityFactor);
-            for (let i = 1; i < nodes.length; i++) {
-              const prev = nodes[i - 1];
-              const cur = nodes[i];
-              const dx = cur.position('x') - prev.position('x');
-              if (dx < minGap) cur.position('x', prev.position('x') + minGap);
+            for (const nodes of grouped.values()) {
+              nodes.sort((a, b) => a.position('x') - b.position('x'));
+              for (let i = 1; i < nodes.length; i++) {
+                const prev = nodes[i - 1];
+                const cur = nodes[i];
+                const dx = cur.position('x') - prev.position('x');
+                if (dx < minGap) cur.position('x', prev.position('x') + minGap);
+              }
             }
           });
           assignEdgeCurves();
@@ -820,7 +861,12 @@
 
         function makeLayoutStorageKey() {
           const resultId = `{{ result_id or 'latest' }}`;
-          return `nb-diagram-layout-${resultId}`;
+          return `nb-cartographer-layout-v3-${resultId}`;
+        }
+
+        function makeLegacyLayoutStorageKey() {
+          const resultId = `{{ result_id or 'latest' }}`;
+          return `nb-diagram-layout-v3-${resultId}`;
         }
 
         function saveLayoutToStorage() {
@@ -832,17 +878,23 @@
         }
 
         function loadLayoutFromStorage() {
-          const raw = localStorage.getItem(makeLayoutStorageKey());
+          const newKey = makeLayoutStorageKey();
+          const legacyKey = makeLegacyLayoutStorageKey();
+          const raw = localStorage.getItem(newKey) || localStorage.getItem(legacyKey);
           if (!raw) return false;
           try {
             const positions = JSON.parse(raw);
+            if (!localStorage.getItem(newKey) && localStorage.getItem(legacyKey)) {
+              localStorage.setItem(newKey, raw);
+            }
             cy.layout({
               name: 'preset',
               positions: (node) => positions[node.id()] || node.position(),
               animate: false,
-              fit: true,
+              fit: false,
               padding: 34,
             }).run();
+            fitVisibleWithMinZoom(cy.elements(':visible'), 34, 0.68);
             return true;
           } catch (_) {
             return false;
@@ -899,7 +951,7 @@
           cy.elements().difference(keep).addClass('filtered-out');
           if (!keep.empty()) {
             applyReadableSpacing();
-            cy.fit(keep, 34);
+            fitVisibleWithMinZoom(keep, 34, 0.68);
           }
         }
 
