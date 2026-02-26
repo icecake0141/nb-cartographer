@@ -405,16 +405,32 @@ def build_device_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list
 
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
+    rack_nodes: set[str] = set()
     for dev in sorted(device_nodes):
         kind_counter = endpoint_kinds_by_device.get(dev, Counter())
         role_hint = infer_role_hint(kind_counter)
+        rack_name = rack_by_device.get(dev, "") or "UNASSIGNED"
+        rack_id = f"rack::{rack_name}"
+        if rack_id not in rack_nodes:
+            rack_nodes.add(rack_id)
+            nodes.append(
+                {
+                    "data": {
+                        "id": rack_id,
+                        "label": rack_name,
+                        "node_type": "rack",
+                    },
+                    "classes": "rack-group",
+                }
+            )
         nodes.append(
             {
                 "data": {
                     "id": f"dev::{dev}",
                     "label": dev,
                     "node_type": "device",
-                    "rack": rack_by_device.get(dev, "") or "UNASSIGNED",
+                    "rack": rack_name,
+                    "parent": rack_id,
                     "role_hint": role_hint,
                 },
                 "classes": "device-summary",
