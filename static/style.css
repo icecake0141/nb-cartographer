@@ -89,6 +89,62 @@ a {
   margin: 16px 0;
 }
 
+.cy-wrap {
+  position: relative;
+}
+
+.diagram-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 6px;
+}
+
+.diagram-toolbar input,
+.diagram-toolbar select {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.diagram-toolbar button {
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+.in-diagram-legend {
+  position: absolute;
+  top: 24px;
+  right: 16px;
+  width: 220px;
+  max-height: 280px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.in-diagram-legend h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.legend-item {
+  width: 100%;
+  text-align: left;
+  margin: 3px 0;
+  background: #fff;
+  color: #0f172a;
+  border: 1px solid var(--line);
+}
+
+.legend-item.inactive {
+  opacity: 0.35;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;

@@ -420,6 +420,7 @@ def build_device_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list
                     "target": f"dev::{b}",
                     "label": f"{count} links ({top_type})",
                     "count": count,
+                    "cable_type": top_type,
                     "color": top_color,
                     "domain": top_domain,
                 }

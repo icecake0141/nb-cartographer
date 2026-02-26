@@ -108,7 +108,40 @@
         </table>
       </details>
 
-      <div id="cy"></div>
+      <section class="diagram-toolbar">
+        <label for="labelLevel">ラベル:</label>
+        <select id="labelLevel">
+          <option value="standard">標準</option>
+          <option value="minimal">最小</option>
+          <option value="detailed">詳細</option>
+        </select>
+        <label for="searchNode">検索:</label>
+        <input id="searchNode" type="text" placeholder="device名">
+        <label for="focusHops">Hop:</label>
+        <select id="focusHops">
+          <option value="0">0</option>
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+        </select>
+        <button id="focusBtn" type="button">フォーカス</button>
+        <button id="clearFocusBtn" type="button">解除</button>
+        <button id="resetViewBtn" type="button">Reset View</button>
+        <button id="saveLayoutBtn" type="button">レイアウト保存</button>
+        <button id="loadLayoutBtn" type="button">レイアウト読込</button>
+      </section>
+      <div class="cy-wrap">
+        <div id="cy"></div>
+        <aside class="in-diagram-legend">
+          <h3>Cable Media</h3>
+          <div id="edgeLegendItems">
+            {% for t in type_legend %}
+              <button type="button" class="legend-item" data-cable-type="{{ t.type }}">
+                <span class="swatch" style="--swatch: {{ t.color }}"></span>{{ t.type }}
+              </button>
+            {% endfor %}
+          </div>
+        </aside>
+      </div>
       <section class="role-stats" id="roleStats"></section>
       <section class="component-filter">
         <label for="rackSelect">ラック:</label>
@@ -159,9 +192,20 @@
         const showServers = document.getElementById('showServers');
         const rackFolders = document.getElementById('rackFolders');
         const roleStats = document.getElementById('roleStats');
+        const labelLevel = document.getElementById('labelLevel');
+        const searchNode = document.getElementById('searchNode');
+        const focusHops = document.getElementById('focusHops');
+        const focusBtn = document.getElementById('focusBtn');
+        const clearFocusBtn = document.getElementById('clearFocusBtn');
+        const resetViewBtn = document.getElementById('resetViewBtn');
+        const saveLayoutBtn = document.getElementById('saveLayoutBtn');
+        const loadLayoutBtn = document.getElementById('loadLayoutBtn');
+        const legendItems = document.getElementById('edgeLegendItems');
         let cy = null;
         let comps = [];
         let hiddenServerRacks = new Set();
+        let hiddenCableTypes = new Set();
+        let focusNodeIds = null;
 
         function deviceStyle() {
           return [
@@ -580,6 +624,82 @@
           return all.difference(serverNodes);
         }
 
+        function cableTypeKeep() {
+          if (hiddenCableTypes.size === 0) return cy.elements();
+          const hiddenEdges = cy.edges().filter((e) => hiddenCableTypes.has(e.data('cable_type') || ''));
+          return cy.elements().difference(hiddenEdges);
+        }
+
+        function focusKeep() {
+          if (!focusNodeIds || focusNodeIds.size === 0) return cy.elements();
+          const nodes = cy.nodes('node.device-summary').filter((n) => focusNodeIds.has(n.id()));
+          const edges = nodes.connectedEdges();
+          return nodes.union(edges);
+        }
+
+        function applyLabelLevel(level) {
+          if (level === 'minimal') {
+            cy.style().selector('node.device-summary').style('label', '').selector('edge').style('label', '').update();
+            return;
+          }
+          if (level === 'detailed') {
+            cy.style()
+              .selector('node.device-summary')
+              .style('label', (ele) => `${ele.data('label')} (${ele.connectedEdges().length})`)
+              .selector('edge')
+              .style('label', 'data(label)')
+              .update();
+            return;
+          }
+          cy.style().selector('node.device-summary').style('label', 'data(label)').selector('edge').style('label', 'data(label)').update();
+        }
+
+        function makeLayoutStorageKey() {
+          const resultId = `{{ result_id or 'latest' }}`;
+          return `nb-diagram-layout-${resultId}`;
+        }
+
+        function saveLayoutToStorage() {
+          const positions = {};
+          cy.nodes('node.device-summary').forEach((n) => {
+            positions[n.id()] = n.position();
+          });
+          localStorage.setItem(makeLayoutStorageKey(), JSON.stringify(positions));
+        }
+
+        function loadLayoutFromStorage() {
+          const raw = localStorage.getItem(makeLayoutStorageKey());
+          if (!raw) return false;
+          try {
+            const positions = JSON.parse(raw);
+            cy.layout({
+              name: 'preset',
+              positions: (node) => positions[node.id()] || node.position(),
+              animate: false,
+              fit: true,
+              padding: 34,
+            }).run();
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }
+
+        function buildFocusIdsByQuery(query, hops) {
+          const q = query.trim().toLowerCase();
+          if (!q) return null;
+          const starts = cy.nodes('node.device-summary').filter((n) => (n.data('label') || '').toLowerCase().includes(q));
+          if (starts.empty()) return new Set();
+          const visited = new Set(starts.map((n) => n.id()));
+          let frontier = starts;
+          for (let step = 0; step < hops; step++) {
+            const next = frontier.connectedEdges().connectedNodes('node.device-summary');
+            next.forEach((n) => visited.add(n.id()));
+            frontier = next;
+          }
+          return visited;
+        }
+
         function buildRackFolders() {
           const racks = [
             ...new Set(
@@ -608,7 +728,9 @@
           const byComp = componentKeep(select.value);
           const byRack = rackKeep(rackSelect.value);
           const byServer = serverKeep();
-          const keep = byComp.intersection(byRack).intersection(byServer);
+          const byCable = cableTypeKeep();
+          const byFocus = focusKeep();
+          const keep = byComp.intersection(byRack).intersection(byServer).intersection(byCable).intersection(byFocus);
           cy.elements().difference(keep).addClass('filtered-out');
           if (!keep.empty()) {
             applyReadableSpacing();
@@ -632,10 +754,12 @@
 
         classifyRoles();
         applyHierarchicalLayout();
+        loadLayoutFromStorage();
         buildComponents();
         buildRackFolders();
         fillSelector();
         showServers.checked = false;
+        applyLabelLevel('standard');
         if (comps.length > 1) {
           select.value = '0';
           applyFilters();
@@ -646,6 +770,40 @@
         select.addEventListener('change', applyFilters);
         rackSelect.addEventListener('change', applyFilters);
         showServers.addEventListener('change', applyFilters);
+        labelLevel.addEventListener('change', () => applyLabelLevel(labelLevel.value));
+        focusBtn.addEventListener('click', () => {
+          const hops = Number(focusHops.value || '1');
+          focusNodeIds = buildFocusIdsByQuery(searchNode.value, hops);
+          applyFilters();
+        });
+        clearFocusBtn.addEventListener('click', () => {
+          focusNodeIds = null;
+          searchNode.value = '';
+          applyFilters();
+        });
+        resetViewBtn.addEventListener('click', () => {
+          applyHierarchicalLayout();
+          applyFilters();
+        });
+        saveLayoutBtn.addEventListener('click', () => {
+          saveLayoutToStorage();
+        });
+        loadLayoutBtn.addEventListener('click', () => {
+          if (loadLayoutFromStorage()) applyFilters();
+        });
+        legendItems.querySelectorAll('.legend-item').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const t = btn.dataset.cableType || '';
+            if (hiddenCableTypes.has(t)) {
+              hiddenCableTypes.delete(t);
+              btn.classList.remove('inactive');
+            } else {
+              hiddenCableTypes.add(t);
+              btn.classList.add('inactive');
+            }
+            applyFilters();
+          });
+        });
       </script>
     {% endif %}
   </main>
