@@ -372,10 +372,10 @@ def build_device_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list
             return "external"
         if kind_counter.get("front_port", 0) > 0 or kind_counter.get("rear_port", 0) > 0:
             return "patch_panel"
-        if kind_counter.get("power_feed", 0) > 0:
-            return "power_source"
         if kind_counter.get("power_outlet", 0) > 0:
             return "pdu"
+        if kind_counter.get("power_feed", 0) > 0:
+            return "power_source"
         if kind_counter.get("power_port", 0) > 0:
             return "powered_device"
         return "unknown"
