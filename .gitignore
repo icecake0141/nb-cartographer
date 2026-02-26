@@ -140,3 +140,4 @@ instance/
 secrets.json
 import/*
 data/
+worktrees/
