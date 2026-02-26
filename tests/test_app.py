@@ -3,6 +3,7 @@ import unittest
 from app import (
     CableRow,
     build_device_graph,
+    build_drawio_xml,
     normalize_color,
     parse_cables_csv,
     resolve_data_path,
@@ -108,9 +109,93 @@ class AppLogicTests(unittest.TestCase):
         self.assertIsNone(columns["cable_label"])
         self.assertEqual(rows[0].cable_label, "Cable-1")
 
+    def test_parse_cables_csv_returns_empty_when_required_columns_missing(self):
+        csv_bytes = ("foo,bar\n" "1,2\n").encode("utf-8")
+
+        rows, columns = parse_cables_csv(csv_bytes)
+
+        self.assertEqual(rows, [])
+        self.assertIsNone(columns["a_device"])
+        self.assertIsNone(columns["a_port"])
+        self.assertIsNone(columns["b_device"])
+        self.assertIsNone(columns["b_port"])
+
     def test_resolve_data_path_rejects_traversal(self):
         with self.assertRaises(ValueError):
             resolve_data_path("../outside.txt")
+
+    def test_build_device_graph_role_hint_for_power_endpoints(self):
+        rows = [
+            CableRow(
+                a_device="pdu1",
+                a_interface="out1",
+                b_device="srv1",
+                b_interface="psu1",
+                a_kind="power_outlet",
+                b_kind="power_port",
+                cable_type="Power",
+                cable_color="#123456",
+                domain="power",
+            ),
+            CableRow(
+                a_device="ups1",
+                a_interface="feed1",
+                b_device="pdu2",
+                b_interface="in1",
+                a_kind="power_feed",
+                b_kind="power_port",
+                cable_type="Power",
+                cable_color="#654321",
+                domain="power",
+            ),
+        ]
+
+        nodes, _ = build_device_graph(rows)
+        by_id = {n["data"]["id"]: n["data"] for n in nodes if n["data"]["node_type"] == "device"}
+
+        self.assertEqual(by_id["dev::pdu1"]["role_hint"], "pdu")
+        self.assertEqual(by_id["dev::ups1"]["role_hint"], "power_source")
+        self.assertEqual(by_id["dev::srv1"]["role_hint"], "powered_device")
+
+    def test_build_drawio_xml_escapes_values_and_emits_edges(self):
+        elements = [
+            {
+                "data": {
+                    "id": "dev::sw1",
+                    "label": 'sw<1>&"edge"',
+                    "node_type": "device",
+                    "role_hint": "leaf",
+                    "rack": "R1",
+                }
+            },
+            {
+                "data": {
+                    "id": "dev::srv1",
+                    "label": "srv1",
+                    "node_type": "device",
+                    "role_hint": "server",
+                    "rack": "R2",
+                }
+            },
+            {
+                "data": {
+                    "id": "d1",
+                    "source": "dev::sw1",
+                    "target": "dev::srv1",
+                    "label": "link<1>",
+                    "color": "#0f766e",
+                    "domain": "data",
+                }
+            },
+        ]
+
+        xml = build_drawio_xml(elements, diagram_name='Main & "Core"')
+
+        self.assertIn('Main &amp; "Core"', xml)
+        self.assertIn('sw&lt;1&gt;&amp;"edge"', xml)
+        self.assertIn("link&lt;1&gt;", xml)
+        self.assertIn('source="n1"', xml)
+        self.assertIn('target="n2"', xml)
 
 
 if __name__ == "__main__":

@@ -220,6 +220,8 @@ def parse_cables_csv(file_bytes: bytes) -> tuple[list[CableRow], dict[str, str |
         raise ValueError("CSV header is missing.")
 
     columns = choose_columns(headers)
+    if all(columns.get(name) is None for name in ("a_device", "a_port", "b_device", "b_port")):
+        return [], columns
     rows: list[CableRow] = []
 
     for idx, row in enumerate(reader, start=1):
