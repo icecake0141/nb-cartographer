@@ -138,6 +138,9 @@ Thumbs.db
 # Project specific
 instance/
 secrets.json
+# Local import files (user-specific exports)
 import/*
+# Keep directory skeleton
+!import/.gitkeep
 data/
 worktrees/

@@ -29,6 +29,13 @@ python app.py
 
 起動後に `http://localhost:8000` を開いて CSV をアップロードします。
 
+## 一般ユーザ向けテストファイル
+
+- 公開サンプル: `samples/netbox_cables_sample.csv`
+- ローカル作業用の投入先: `import/`（`.gitignore` で除外）
+
+公開サンプルで動作確認したい場合は、画面から `samples/netbox_cables_sample.csv` をそのままアップロードしてください。
+
 ## テスト / Lint / Format
 
 ```bash
