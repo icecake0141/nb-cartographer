@@ -503,7 +503,7 @@
           const deg = degreeMap();
 
           roleNodes.external.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
-          const externalX = spreadX(roleNodes.external, width / 2, 200);
+          const externalX = spreadX(roleNodes.external, width / 2, 360);
           roleNodes.external.forEach((n) => { positions[n.id()] = { x: externalX[n.id()], y: yMap.external }; });
 
           roleNodes.patch_panel.sort((a, b) => {
@@ -511,11 +511,11 @@
             if (rackCmp !== 0) return rackCmp;
             return (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0);
           });
-          const ppX = spreadX(roleNodes.patch_panel, width / 2, 140);
+          const ppX = spreadX(roleNodes.patch_panel, width / 2, 260);
           roleNodes.patch_panel.forEach((n) => { positions[n.id()] = { x: ppX[n.id()], y: yMap.patch_panel }; });
 
           roleNodes.core.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
-          const coreX = spreadX(roleNodes.core, width / 2, 180);
+          const coreX = spreadX(roleNodes.core, width / 2, 320);
           roleNodes.core.forEach((n) => { positions[n.id()] = { x: coreX[n.id()], y: yMap.core }; });
 
           roleNodes.leaf.sort((a, b) => {
@@ -523,7 +523,7 @@
             if (rackCmp !== 0) return rackCmp;
             return (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0);
           });
-          const leafX = spreadX(roleNodes.leaf, width / 2, 120);
+          const leafX = spreadX(roleNodes.leaf, width / 2, 240);
           roleNodes.leaf.forEach((n) => { positions[n.id()] = { x: leafX[n.id()], y: yMap.leaf }; });
 
           const byRackLeafCenter = new Map();
@@ -553,10 +553,10 @@
             }
           };
 
-          placeByRack(roleNodes.power_source, "power_source", 110);
-          placeByRack(roleNodes.pdu, "pdu", 90);
-          placeByRack(roleNodes.powered_device, "powered_device", 84);
-          placeByRack(roleNodes.server, "server", 84);
+          placeByRack(roleNodes.power_source, "power_source", 180);
+          placeByRack(roleNodes.pdu, "pdu", 150);
+          placeByRack(roleNodes.powered_device, "powered_device", 130);
+          placeByRack(roleNodes.server, "server", 130);
 
           cy.layout({
             name: 'preset',
@@ -569,7 +569,7 @@
           // Fine collision avoidance within the same horizontal band.
           ['external', 'patch_panel', 'core', 'leaf', 'power_source', 'pdu', 'powered_device', 'server'].forEach((role) => {
             const nodes = cy.nodes(`node.device-summary[role = "${role}"]`).sort((a, b) => a.position('x') - b.position('x'));
-            const minGap = role === 'server' || role === 'powered_device' ? 74 : 92;
+            const minGap = role === 'server' || role === 'powered_device' ? 130 : 180;
             for (let i = 1; i < nodes.length; i++) {
               const prev = nodes[i - 1];
               const cur = nodes[i];
@@ -587,7 +587,7 @@
           const densityFactor = count <= 24 ? 1.8 : count <= 48 ? 1.4 : 1.0;
           ['external', 'patch_panel', 'core', 'leaf', 'power_source', 'pdu', 'powered_device', 'server'].forEach((role) => {
             const nodes = cy.nodes(`node.device-summary[role = "${role}"]:visible`).sort((a, b) => a.position('x') - b.position('x'));
-            const baseGap = role === 'server' || role === 'powered_device' ? 74 : 92;
+            const baseGap = role === 'server' || role === 'powered_device' ? 130 : 180;
             const minGap = Math.floor(baseGap * densityFactor);
             for (let i = 1; i < nodes.length; i++) {
               const prev = nodes[i - 1];
