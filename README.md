@@ -28,6 +28,23 @@ python app.py
 
 起動後に `http://localhost:8000` を開いて CSV をアップロードします。
 
+## テスト / Lint / Format
+
+```bash
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m unittest discover -s tests -v
+ruff check .
+black --check .
+```
+
+自動整形する場合:
+
+```bash
+black .
+ruff check . --fix
+```
+
 ## 保存仕様（永続化）
 
 - メタデータ: `data/results.db` (SQLite)

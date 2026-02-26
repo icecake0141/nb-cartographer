@@ -7,10 +7,10 @@ import json
 import re
 import sqlite3
 import uuid
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
-from collections import Counter
 
 from flask import Flask, abort, render_template, request, send_file
 from werkzeug.utils import secure_filename
@@ -74,12 +74,26 @@ def find_column(headers: list[str], patterns: list[str]) -> str | None:
 
 def choose_columns(headers: list[str]) -> dict[str, str | None]:
     return {
-        "a_device": find_column(headers, [r"terminationa.*device", r"sidea.*device", r"devicea", r"adevice"]),
-        "a_port": find_column(headers, [r"terminationa.*(name|port)", r"^terminationa$", r"interfacea", r"porta", r"aname"]),
-        "a_type": find_column(headers, [r"terminationa.*type", r"sidea.*type", r"^atype$", r"endpa.*type"]),
-        "b_device": find_column(headers, [r"terminationb.*device", r"sideb.*device", r"deviceb", r"bdevice"]),
-        "b_port": find_column(headers, [r"terminationb.*(name|port)", r"^terminationb$", r"interfaceb", r"portb", r"bname"]),
-        "b_type": find_column(headers, [r"terminationb.*type", r"sideb.*type", r"^btype$", r"endpb.*type"]),
+        "a_device": find_column(
+            headers, [r"terminationa.*device", r"sidea.*device", r"devicea", r"adevice"]
+        ),
+        "a_port": find_column(
+            headers,
+            [r"terminationa.*(name|port)", r"^terminationa$", r"interfacea", r"porta", r"aname"],
+        ),
+        "a_type": find_column(
+            headers, [r"terminationa.*type", r"sidea.*type", r"^atype$", r"endpa.*type"]
+        ),
+        "b_device": find_column(
+            headers, [r"terminationb.*device", r"sideb.*device", r"deviceb", r"bdevice"]
+        ),
+        "b_port": find_column(
+            headers,
+            [r"terminationb.*(name|port)", r"^terminationb$", r"interfaceb", r"portb", r"bname"],
+        ),
+        "b_type": find_column(
+            headers, [r"terminationb.*type", r"sideb.*type", r"^btype$", r"endpb.*type"]
+        ),
         "cable_id": find_column(headers, [r"^id$", r"cable.*id", r"^pk$", r"objectid"]),
         "cable_label": find_column(headers, [r"^label$", r"cable.*label", r"name"]),
         "cable_type": find_column(headers, [r"^type$", r"cable.*type", r"mediatype"]),
@@ -410,8 +424,16 @@ def build_device_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list
     for i, (pair, count) in enumerate(sorted(pair_counter.items()), start=1):
         a, b = pair
         top_type = pair_types[pair].most_common(1)[0][0] if pair_types[pair] else "Unknown"
-        top_color = pair_colors[pair].most_common(1)[0][0] if pair in pair_colors and pair_colors[pair] else "#64748b"
-        top_domain = pair_domains[pair].most_common(1)[0][0] if pair in pair_domains and pair_domains[pair] else "data"
+        top_color = (
+            pair_colors[pair].most_common(1)[0][0]
+            if pair in pair_colors and pair_colors[pair]
+            else "#64748b"
+        )
+        top_domain = (
+            pair_domains[pair].most_common(1)[0][0]
+            if pair in pair_domains and pair_domains[pair]
+            else "data"
+        )
         edges.append(
             {
                 "data": {
@@ -448,8 +470,12 @@ def store_result(
     rows_rel = Path("results") / f"{stamp}_{suffix}_rows.json"
 
     (DATA_DIR / upload_rel).write_bytes(file_bytes)
-    (DATA_DIR / graph_rel).write_text(json.dumps(nodes + edges, ensure_ascii=False), encoding="utf-8")
-    (DATA_DIR / rows_rel).write_text(json.dumps([asdict(r) for r in rows], ensure_ascii=False), encoding="utf-8")
+    (DATA_DIR / graph_rel).write_text(
+        json.dumps(nodes + edges, ensure_ascii=False), encoding="utf-8"
+    )
+    (DATA_DIR / rows_rel).write_text(
+        json.dumps([asdict(r) for r in rows], ensure_ascii=False), encoding="utf-8"
+    )
 
     created_at = dt.datetime.now().isoformat(timespec="seconds")
     with sqlite3.connect(DB_PATH) as con:
@@ -520,14 +546,22 @@ def index() -> str:
 def upload() -> str:
     file = request.files.get("csv_file")
     if not file or not file.filename:
-        return render_template("index.html", error="CSVファイルを選択してください。", recent_results=list_recent_results())
+        return render_template(
+            "index.html",
+            error="CSVファイルを選択してください。",
+            recent_results=list_recent_results(),
+        )
 
     file_bytes = file.read()
 
     try:
         rows, columns = parse_cables_csv(file_bytes)
     except Exception as exc:
-        return render_template("index.html", error=f"CSV解析に失敗しました: {exc}", recent_results=list_recent_results())
+        return render_template(
+            "index.html",
+            error=f"CSV解析に失敗しました: {exc}",
+            recent_results=list_recent_results(),
+        )
 
     if not rows:
         return render_template(
@@ -538,7 +572,11 @@ def upload() -> str:
 
     nodes, edges = build_graph(rows)
     device_nodes, device_edges = build_device_graph(rows)
-    missing = [name for name, col in columns.items() if col is None and name in {"a_device", "a_port", "b_device", "b_port"}]
+    missing = [
+        name
+        for name, col in columns.items()
+        if col is None and name in {"a_device", "a_port", "b_device", "b_port"}
+    ]
     type_counter = Counter(r.cable_type for r in rows)
     endpoint_kind_counter = Counter([r.a_kind for r in rows] + [r.b_kind for r in rows])
     legend_map: dict[str, str] = {}
@@ -608,7 +646,11 @@ def result_detail(result_id: int) -> str:
     device_nodes, device_edges = build_device_graph(rows)
     columns = json.loads(record["columns_json"])
     type_legend = json.loads(record["type_legend_json"])
-    missing = [name for name, col in columns.items() if col is None and name in {"a_device", "a_port", "b_device", "b_port"}]
+    missing = [
+        name
+        for name, col in columns.items()
+        if col is None and name in {"a_device", "a_port", "b_device", "b_port"}
+    ]
     endpoint_kind_counter = Counter([r.a_kind for r in rows] + [r.b_kind for r in rows])
     kind_labels = {
         "interface": "Interface",
