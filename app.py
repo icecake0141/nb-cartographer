@@ -669,7 +669,7 @@ def upload() -> str:
     if not file or not file.filename:
         return render_template(
             "index.html",
-            error="CSVファイルを選択してください。",
+            error="Please select a CSV file.",
             recent_results=list_recent_results(),
         )
 
@@ -680,14 +680,14 @@ def upload() -> str:
     except Exception as exc:
         return render_template(
             "index.html",
-            error=f"CSV解析に失敗しました: {exc}",
+            error=f"Failed to parse CSV: {exc}",
             recent_results=list_recent_results(),
         )
 
     if not rows:
         return render_template(
             "index.html",
-            error="接続データを抽出できませんでした。列名を確認してください。",
+            error="No connection data could be extracted. Please verify your column names.",
             recent_results=list_recent_results(),
         )
 

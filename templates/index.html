@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,12 +10,12 @@
 </head>
 <body>
   <main class="container">
-    <h1>NetBox Cables から結線図を自動生成</h1>
-    <p class="description">NetBox の Cables CSV をアップロードすると、Connections ベースの結線図を生成します。</p>
+    <h1>Automatically Generate Cable Diagrams from NetBox Cables</h1>
+    <p class="description">Upload a NetBox Cables CSV to generate a connections-based cable diagram.</p>
 
     <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
       <input type="file" name="csv_file" accept=".csv,text/csv" required>
-      <button type="submit">図を生成</button>
+      <button type="submit">Generate Diagram</button>
     </form>
 
     {% if error %}
@@ -24,9 +24,9 @@
 
     {% if recent_results %}
       <section class="history">
-        <h2>保存済み結果</h2>
+        <h2>Saved Results</h2>
         <table>
-          <thead><tr><th>ID</th><th>日時</th><th>元ファイル</th><th>ノード</th><th>ケーブル</th><th>操作</th></tr></thead>
+          <thead><tr><th>ID</th><th>Created At</th><th>Source File</th><th>Nodes</th><th>Cables</th><th>Actions</th></tr></thead>
           <tbody>
           {% for item in recent_results %}
             <tr>
@@ -36,7 +36,7 @@
               <td>{{ item.node_count }}</td>
               <td>{{ item.edge_count }}</td>
               <td>
-                <a href="{{ url_for('result_detail', result_id=item.id) }}">表示</a>
+                <a href="{{ url_for('result_detail', result_id=item.id) }}">View</a>
                 /
                 <a href="{{ url_for('download_file', result_id=item.id, kind='csv') }}">CSV</a>
                 /
@@ -53,18 +53,18 @@
 
     {% if graph_json %}
       <section class="meta">
-        <p>集約ノード数(Device): <strong>{{ device_node_count }}</strong></p>
-        <p>集約リンク数(Device間): <strong>{{ device_edge_count }}</strong></p>
+        <p>Aggregated Device Nodes: <strong>{{ device_node_count }}</strong></p>
+        <p>Aggregated Device-to-Device Links: <strong>{{ device_edge_count }}</strong></p>
       </section>
       {% if result_id %}
-        <p class="saved">保存済み Result ID: <strong>{{ result_id }}</strong>（後でこのページの「保存済み結果」から再表示できます）</p>
+        <p class="saved">Saved Result ID: <strong>{{ result_id }}</strong> (you can reopen it later from "Saved Results" on this page)</p>
       {% endif %}
 
       {% if type_legend %}
         <section class="legend">
-          <h2>Type / Color 凡例</h2>
+          <h2>Type / Color Legend</h2>
           <table>
-            <thead><tr><th>Type</th><th>Color</th><th>件数</th></tr></thead>
+            <thead><tr><th>Type</th><th>Color</th><th>Count</th></tr></thead>
             <tbody>
             {% for t in type_legend %}
               <tr>
@@ -80,9 +80,9 @@
 
       {% if node_legend %}
         <section class="legend">
-          <h2>Endpoint 種別凡例</h2>
+          <h2>Endpoint Type Legend</h2>
           <table>
-            <thead><tr><th>種別</th><th>件数</th></tr></thead>
+            <thead><tr><th>Type</th><th>Count</th></tr></thead>
             <tbody>
             {% for n in node_legend %}
               <tr>
@@ -96,41 +96,41 @@
       {% endif %}
 
       {% if missing %}
-        <p class="warn">推定できなかった列: {{ ', '.join(missing) }}</p>
+        <p class="warn">Undetected columns: {{ ', '.join(missing) }}</p>
       {% endif %}
 
       <details>
-        <summary>検出した列マッピング</summary>
+        <summary>Detected Column Mapping</summary>
         <table>
-          <thead><tr><th>論理名</th><th>CSV列</th></tr></thead>
+          <thead><tr><th>Logical Name</th><th>CSV Column</th></tr></thead>
           <tbody>
           {% for k, v in columns.items() %}
-            <tr><td>{{ k }}</td><td>{{ v or '(未検出)' }}</td></tr>
+            <tr><td>{{ k }}</td><td>{{ v or '(Not detected)' }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
       </details>
 
       <section class="diagram-toolbar">
-        <label for="labelLevel">ラベル:</label>
+        <label for="labelLevel">Labels:</label>
         <select id="labelLevel">
-          <option value="standard">標準</option>
-          <option value="minimal">最小</option>
-          <option value="detailed">詳細</option>
+          <option value="standard">Standard</option>
+          <option value="minimal">Minimal</option>
+          <option value="detailed">Detailed</option>
         </select>
-        <label for="searchNode">検索:</label>
-        <input id="searchNode" type="text" placeholder="device名">
+        <label for="searchNode">Search:</label>
+        <input id="searchNode" type="text" placeholder="device name">
         <label for="focusHops">Hop:</label>
         <select id="focusHops">
           <option value="0">0</option>
           <option value="1" selected>1</option>
           <option value="2">2</option>
         </select>
-        <button id="focusBtn" type="button">フォーカス</button>
-        <button id="clearFocusBtn" type="button">解除</button>
+        <button id="focusBtn" type="button">Focus</button>
+        <button id="clearFocusBtn" type="button">Clear</button>
         <button id="resetViewBtn" type="button">Reset View</button>
-        <button id="saveLayoutBtn" type="button">レイアウト保存</button>
-        <button id="loadLayoutBtn" type="button">レイアウト読込</button>
+        <button id="saveLayoutBtn" type="button">Save Layout</button>
+        <button id="loadLayoutBtn" type="button">Load Layout</button>
       </section>
       <div class="cy-wrap">
         <div id="cy"></div>
@@ -147,26 +147,26 @@
       </div>
       <section class="role-stats" id="roleStats"></section>
       <section class="component-filter">
-        <label for="rackSelect">ラック:</label>
+        <label for="rackSelect">Rack:</label>
         <select id="rackSelect">
-          <option value="all">全ラック</option>
+          <option value="all">All Racks</option>
           {% for rack in rack_options or [] %}
             <option value="{{ rack }}">{{ rack }}</option>
           {% endfor %}
         </select>
-        <label for="componentSelect">表示コンポーネント:</label>
+        <label for="componentSelect">Visible Component:</label>
         <select id="componentSelect"></select>
-        <label><input id="showServers" type="checkbox"> サーバ表示</label>
+        <label><input id="showServers" type="checkbox"> Show Servers</label>
       </section>
       <details class="rack-folders">
-        <summary>ラックごとの折りたたみ（サーバ表示）</summary>
+        <summary>Per-Rack Collapse (Server Visibility)</summary>
         <div id="rackFolders"></div>
       </details>
 
       <details>
-        <summary>接続一覧</summary>
+        <summary>Connection List</summary>
         <table>
-          <thead><tr><th>A Rack</th><th>A Device</th><th>A Interface</th><th>A終端タイプ</th><th>B Rack</th><th>B Device</th><th>B Interface</th><th>B終端タイプ</th><th>ケーブル</th><th>Cable Type</th><th>Color</th><th>Domain</th></tr></thead>
+          <thead><tr><th>A Rack</th><th>A Device</th><th>A Interface</th><th>A Endpoint Type</th><th>B Rack</th><th>B Device</th><th>B Interface</th><th>B Endpoint Type</th><th>Cable</th><th>Cable Type</th><th>Color</th><th>Domain</th></tr></thead>
           <tbody>
           {% for r in rows %}
             <tr>
@@ -791,7 +791,7 @@
           select.innerHTML = '';
           const allOpt = document.createElement('option');
           allOpt.value = 'all';
-          allOpt.textContent = `全体表示 (${comps.length} components)`;
+          allOpt.textContent = `Show All (${comps.length} components)`;
           select.appendChild(allOpt);
           comps.forEach((comp, i) => {
             const o = document.createElement('option');
