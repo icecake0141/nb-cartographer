@@ -515,20 +515,60 @@
           const externalX = spreadX(roleNodes.external, width / 2, 360);
           roleNodes.external.forEach((n) => { positions[n.id()] = { x: externalX[n.id()], y: yMap.external }; });
 
-          roleNodes.patch_panel.sort((a, b) => {
-            const rackCmp = String(a.data('rack') || '').localeCompare(String(b.data('rack') || ''));
-            if (rackCmp !== 0) return rackCmp;
-            return (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0);
-          });
-          const byRackPatch = new Map();
+          const roleToTier = (role) => {
+            if (role === 'external') return 'external';
+            if (role === 'core') return 'core';
+            if (role === 'leaf') return 'leaf';
+            if (role === 'pdu' || role === 'power_source') return 'power';
+            if (role === 'server' || role === 'powered_device') return 'access';
+            return 'leaf';
+          };
+          const tierY = {
+            external: yMap.external,
+            core: yMap.core,
+            leaf: yMap.leaf,
+            power: yMap.pdu,
+            access: yMap.server,
+          };
+          const tierRank = { external: 0, core: 1, leaf: 2, power: 3, access: 4 };
+          const patchTierMeta = new Map();
+
           roleNodes.patch_panel.forEach((n) => {
-            const r = n.data('rack') || 'UNASSIGNED';
-            if (!byRackPatch.has(r)) byRackPatch.set(r, []);
-            byRackPatch.get(r).push(n);
+            const rack = n.data('rack') || 'UNASSIGNED';
+            const neighborRoles = n
+              .connectedEdges()
+              .connectedNodes('node.device-summary')
+              .filter((m) => m.id() !== n.id())
+              .map((m) => m.data('role') || 'leaf');
+            const tiers = [...new Set(neighborRoles.map((r) => roleToTier(r)))].sort((a, b) => tierRank[a] - tierRank[b]);
+            let bucket = 'leaf';
+            let y = tierY.leaf;
+            if (tiers.length === 1) {
+              bucket = tiers[0];
+              y = tierY[bucket];
+            } else if (tiers.length >= 2) {
+              const low = tiers[0];
+              const high = tiers[tiers.length - 1];
+              bucket = `${low}-${high}`;
+              y = (tierY[low] + tierY[high]) / 2;
+            }
+            patchTierMeta.set(n.id(), { rack, bucket, y });
           });
-          for (const [r, nodes] of byRackPatch.entries()) {
-            const xs = spreadX(nodes, rackCenter(r), 220);
-            nodes.forEach((n) => { positions[n.id()] = { x: xs[n.id()], y: yMap.patch_panel }; });
+
+          const byRackAndBucket = new Map();
+          roleNodes.patch_panel.forEach((n) => {
+            const meta = patchTierMeta.get(n.id()) || { rack: 'UNASSIGNED', bucket: 'leaf', y: tierY.leaf };
+            const key = `${meta.rack}::${meta.bucket}`;
+            if (!byRackAndBucket.has(key)) byRackAndBucket.set(key, { rack: meta.rack, y: meta.y, nodes: [] });
+            byRackAndBucket.get(key).nodes.push(n);
+          });
+
+          for (const group of byRackAndBucket.values()) {
+            group.nodes.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
+            const xs = spreadX(group.nodes, rackCenter(group.rack), 220);
+            group.nodes.forEach((n) => {
+              positions[n.id()] = { x: xs[n.id()], y: group.y };
+            });
           }
 
           roleNodes.core.sort((a, b) => (deg.get(b.id()) || 0) - (deg.get(a.id()) || 0));
