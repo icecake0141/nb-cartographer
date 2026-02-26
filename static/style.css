@@ -81,7 +81,7 @@ a {
 }
 
 #cy {
-  height: 680px;
+  height: 760px;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -161,7 +161,7 @@ th, td {
 
 @media (max-width: 768px) {
   #cy {
-    height: 460px;
+    height: 520px;
   }
 }
 
