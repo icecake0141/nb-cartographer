@@ -14,9 +14,11 @@ from typing import Any
 from xml.sax.saxutils import escape
 
 from flask import Flask, abort, render_template, request, send_file
+from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 5 * 1024 * 1024  # 5 MiB upload limit
 
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
@@ -663,6 +665,18 @@ def index() -> str:
     return render_template("index.html", recent_results=list_recent_results())
 
 
+@app.errorhandler(RequestEntityTooLarge)
+def handle_file_too_large(_: RequestEntityTooLarge):
+    return (
+        render_template(
+            "index.html",
+            error="Uploaded file is too large. Maximum size is 5 MiB.",
+            recent_results=list_recent_results(),
+        ),
+        413,
+    )
+
+
 @app.post("/upload")
 def upload() -> str:
     file = request.files.get("csv_file")
@@ -733,8 +747,8 @@ def upload() -> str:
 
     return render_template(
         "index.html",
-        graph_json=json.dumps(nodes + edges, ensure_ascii=False),
-        device_graph_json=json.dumps(device_nodes + device_edges, ensure_ascii=False),
+        graph_json=nodes + edges,
+        device_graph_json=device_nodes + device_edges,
         rack_options=list_racks(rows),
         rows=rows,
         node_count=len(nodes),
@@ -761,7 +775,7 @@ def result_detail(result_id: int) -> str:
     if not graph_path.exists() or not rows_path.exists():
         abort(404)
 
-    graph_json = graph_path.read_text(encoding="utf-8")
+    graph_json = json.loads(graph_path.read_text(encoding="utf-8"))
     row_items = json.loads(rows_path.read_text(encoding="utf-8"))
     rows = [CableRow(**item) for item in row_items]
     device_nodes, device_edges = build_device_graph(rows)
@@ -790,7 +804,7 @@ def result_detail(result_id: int) -> str:
     return render_template(
         "index.html",
         graph_json=graph_json,
-        device_graph_json=json.dumps(device_nodes + device_edges, ensure_ascii=False),
+        device_graph_json=device_nodes + device_edges,
         rack_options=list_racks(rows),
         rows=rows,
         node_count=record["node_count"],

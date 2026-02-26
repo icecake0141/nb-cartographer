@@ -1,9 +1,15 @@
+import io
+import tempfile
 import unittest
+from pathlib import Path
 
+import app as app_module
 from app import (
     CableRow,
+    app,
     build_device_graph,
     build_drawio_xml,
+    init_storage,
     normalize_color,
     parse_cables_csv,
     resolve_data_path,
@@ -196,6 +202,62 @@ class AppLogicTests(unittest.TestCase):
         self.assertIn("link&lt;1&gt;", xml)
         self.assertIn('source="n1"', xml)
         self.assertIn('target="n2"', xml)
+
+
+class UploadSecurityTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.original_data_dir = app_module.DATA_DIR
+        self.original_upload_dir = app_module.UPLOAD_DIR
+        self.original_result_dir = app_module.RESULT_DIR
+        self.original_db_path = app_module.DB_PATH
+        base = Path(self.temp_dir.name)
+        app_module.DATA_DIR = base / "data"
+        app_module.UPLOAD_DIR = app_module.DATA_DIR / "uploads"
+        app_module.RESULT_DIR = app_module.DATA_DIR / "results"
+        app_module.DB_PATH = app_module.DATA_DIR / "results.db"
+        init_storage()
+        app.config["TESTING"] = True
+        self.client = app.test_client()
+
+    def tearDown(self):
+        app_module.DATA_DIR = self.original_data_dir
+        app_module.UPLOAD_DIR = self.original_upload_dir
+        app_module.RESULT_DIR = self.original_result_dir
+        app_module.DB_PATH = self.original_db_path
+        self.temp_dir.cleanup()
+
+    def test_upload_escapes_script_payload_in_embedded_json(self):
+        payload = '</script><script>window.pwned=1</script>'
+        csv_bytes = (
+            "Termination A Device,Termination A Name,Termination B Device,Termination B Name,Type\n"
+            f'"{payload}",xe-0/0/1,sw2,xe-0/0/2,Cat6\n'
+        ).encode("utf-8")
+        response = self.client.post(
+            "/upload",
+            data={"csv_file": (io.BytesIO(csv_bytes), "payload.csv")},
+            content_type="multipart/form-data",
+        )
+
+        html = response.get_data(as_text=True)
+        escaped_payload = (
+            "\\u003c/script\\u003e\\u003cscript\\u003ewindow.pwned=1\\u003c/script\\u003e"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(payload, html)
+        self.assertIn(escaped_payload, html)
+
+    def test_upload_rejects_file_over_limit(self):
+        too_large = b"a" * (app.config["MAX_CONTENT_LENGTH"] + 1)
+        response = self.client.post(
+            "/upload",
+            data={"csv_file": (io.BytesIO(too_large), "too-large.csv")},
+            content_type="multipart/form-data",
+        )
+
+        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 413)
+        self.assertIn("Uploaded file is too large. Maximum size is 5 MiB.", html)
 
 
 if __name__ == "__main__":

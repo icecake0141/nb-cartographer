@@ -189,7 +189,7 @@
       </details>
 
       <script>
-        const deviceElements = {{ device_graph_json | safe }};
+        const deviceElements = {{ device_graph_json | tojson }};
         const select = document.getElementById('componentSelect');
         const rackSelect = document.getElementById('rackSelect');
         const showServers = document.getElementById('showServers');
