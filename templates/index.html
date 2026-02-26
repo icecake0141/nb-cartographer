@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NetBox Cable Diagram Generator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+</head>
+<body>
+  <main class="container">
+    <h1>NetBox Cables から結線図を自動生成</h1>
+    <p class="description">NetBox の Cables CSV をアップロードすると、Connections ベースの結線図を生成します。</p>
+
+    <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form">
+      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <button type="submit">図を生成</button>
+    </form>
+
+    {% if error %}
+      <p class="error">{{ error }}</p>
+    {% endif %}
+
+    {% if graph_json %}
+      <section class="meta">
+        <p>ノード数: <strong>{{ node_count }}</strong></p>
+        <p>ケーブル数: <strong>{{ edge_count }}</strong></p>
+      </section>
+
+      {% if type_legend %}
+        <section class="legend">
+          <h2>Type / Color 凡例</h2>
+          <table>
+            <thead><tr><th>Type</th><th>Color</th><th>件数</th></tr></thead>
+            <tbody>
+            {% for t in type_legend %}
+              <tr>
+                <td>{{ t.type }}</td>
+                <td><span class="swatch" style="--swatch: {{ t.color }}"></span>{{ t.color }}</td>
+                <td>{{ t.count }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </section>
+      {% endif %}
+
+      {% if missing %}
+        <p class="warn">推定できなかった列: {{ ', '.join(missing) }}</p>
+      {% endif %}
+
+      <details>
+        <summary>検出した列マッピング</summary>
+        <table>
+          <thead><tr><th>論理名</th><th>CSV列</th></tr></thead>
+          <tbody>
+          {% for k, v in columns.items() %}
+            <tr><td>{{ k }}</td><td>{{ v or '(未検出)' }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+
+      <div id="cy"></div>
+
+      <details>
+        <summary>接続一覧</summary>
+        <table>
+          <thead><tr><th>A端点</th><th>B端点</th><th>ケーブル</th><th>Type</th><th>Color</th></tr></thead>
+          <tbody>
+          {% for r in rows %}
+            <tr>
+              <td>{{ r.a_endpoint }}</td>
+              <td>{{ r.b_endpoint }}</td>
+              <td>{{ r.cable_label }}</td>
+              <td>{{ r.cable_type }}</td>
+              <td><span class="swatch" style="--swatch: {{ r.cable_color }}"></span>{{ r.cable_color }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </details>
+
+      <script>
+        const elements = {{ graph_json | safe }};
+        const cy = cytoscape({
+          container: document.getElementById('cy'),
+          elements,
+          style: [
+            {
+              selector: 'node',
+              style: {
+                'background-color': '#006d77',
+                'label': 'data(label)',
+                'font-size': 10,
+                'color': '#132a13',
+                'text-background-color': '#ffffff',
+                'text-background-opacity': 0.9,
+                'text-background-padding': 2,
+              }
+            },
+            {
+              selector: 'edge',
+              style: {
+                'width': 2,
+                'line-color': 'data(color)',
+                'target-arrow-shape': 'triangle',
+                'target-arrow-color': 'data(color)',
+                'curve-style': 'bezier',
+                'label': 'data(label)',
+                'font-size': 9,
+                'text-background-color': '#fff',
+                'text-background-opacity': 1,
+                'text-background-padding': 2,
+              }
+            }
+          ],
+          layout: {
+            name: 'cose',
+            animate: false,
+            nodeRepulsion: 350000,
+            idealEdgeLength: 140,
+          }
+        });
+      </script>
+    {% endif %}
+  </main>
+</body>
+</html>
