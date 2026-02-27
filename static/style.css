@@ -21,6 +21,15 @@ body {
   padding: 24px;
 }
 
+.tool-name {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0b5f59;
+}
+
 h1 {
   margin: 0 0 8px;
 }
