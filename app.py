@@ -95,7 +95,7 @@ def read_headers(file_bytes: bytes) -> list[str]:
         text = file_bytes.decode("utf-8", errors="ignore")
 
     reader = csv.DictReader(io.StringIO(text))
-    return reader.fieldnames or []
+    return list(reader.fieldnames or [])
 
 
 def mapping_signature(headers: list[str]) -> str:
@@ -223,7 +223,10 @@ def create_import_run(
                 json.dumps(suggested, ensure_ascii=False),
             ),
         )
-        import_id = int(cur.lastrowid)
+        import_id_raw = cur.lastrowid
+        if import_id_raw is None:
+            raise RuntimeError("Failed to persist import_runs row.")
+        import_id = int(import_id_raw)
         upload_rel = Path("uploads") / f"import_{import_id}_{uuid.uuid4().hex[:8]}_{safe_name}"
         (DATA_DIR / upload_rel).write_bytes(file_bytes)
         con.execute(
@@ -362,7 +365,7 @@ def create_app() -> Flask:
         )
 
     @flask_app.post("/upload")
-    def upload() -> str:
+    def upload() -> Any:
         return (
             render_template(
                 "index.html",

@@ -239,8 +239,8 @@ def build_drawio_xml(elements: list[dict[str, Any]], diagram_name: str) -> str:
 
     for idx, el in enumerate(edge_elements, start=1):
         data = el.get("data", {})
-        src = node_id_map.get(str(data.get("source", "")))
-        dst = node_id_map.get(str(data.get("target", "")))
+        src = node_id_map.get(str(data.get("source", "")), "")
+        dst = node_id_map.get(str(data.get("target", "")), "")
         if not src or not dst:
             continue
         draw_id = f"e{idx}"

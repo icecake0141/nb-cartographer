@@ -106,7 +106,8 @@ def build_device_graph(rows: list[CableRow]) -> tuple[list[dict[str, Any]], list
         bump_kind(dev_a, row.a_kind)
         bump_kind(dev_b, row.b_kind)
 
-        key = tuple(sorted((dev_a, dev_b)))
+        a, b = sorted((dev_a, dev_b))
+        key: tuple[str, str] = (a, b)
         pair_counter[key] = pair_counter.get(key, 0) + 1
         pair_types.setdefault(key, Counter())[row.cable_type] += 1
         pair_colors.setdefault(key, Counter())[row.cable_color] += 1
