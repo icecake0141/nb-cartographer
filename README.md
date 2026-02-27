@@ -4,6 +4,22 @@
 
 A Flask app that generates an aggregated topology diagram between devices from a NetBox `Cables` CSV.
 
+### Table of Contents
+
+- [Key Features](#key-features)
+- [Setup](#setup)
+- [Directory Structure](#directory-structure)
+- [Test / Lint / Format](#test--lint--format)
+- [Persistence Specification](#persistence-specification)
+- [CSV Column Mapping](#csv-column-mapping)
+- [Data Transformation Rules](#data-transformation-rules)
+- [Diagram Operations](#diagram-operations)
+- [Screens and Endpoints](#screens-and-endpoints)
+- [API-first Workflow (v1)](#api-first-workflow-v1)
+- [Frontend Modules](#frontend-modules)
+- [Frontend Build](#frontend-build)
+- [Release](#release)
+
 ### Key Features
 
 - Upload a CSV and generate a topology diagram.
@@ -32,6 +48,23 @@ python app.py
 Recommended: Python 3.11
 
 After startup, open `http://localhost:8000` and upload a CSV.
+
+### Directory Structure
+
+```text
+.
+├── app.py                      # Flask app entrypoint and API routes
+├── nbcart/                     # Core domain/parser/graph/export modules
+├── templates/                  # Jinja2 templates
+├── static/                     # Runtime frontend assets (fallback + dist)
+├── frontend/src/               # Frontend source modules (TypeScript)
+├── migrations/                 # SQL schema migrations
+├── scripts/                    # Utility scripts (sync/check)
+├── tests/                      # Test suite
+├── docs/                       # Design/API/release documentation
+├── data/                       # Runtime data (SQLite/uploads/results; gitignored)
+└── import/                     # Local user import files (gitignored except .gitkeep)
+```
 
 ### Test File for General Users
 
@@ -170,6 +203,22 @@ Fallback runtime target: `static/`
 
 NetBox の `Cables` CSV から、デバイス間の集約トポロジ図を生成する Flask アプリです。
 
+### 目次
+
+- [主な機能](#主な機能)
+- [セットアップ](#セットアップ)
+- [ディレクトリ構成](#ディレクトリ構成)
+- [テスト / Lint / Format](#テスト--lint--format)
+- [保存仕様（永続化）](#保存仕様永続化)
+- [CSV 列マッピング](#csv-列マッピング)
+- [データ変換ルール](#データ変換ルール)
+- [図操作](#図操作)
+- [画面とエンドポイント](#画面とエンドポイント)
+- [API-first ワークフロー（v1）](#api-first-ワークフローv1)
+- [フロントエンドモジュール](#フロントエンドモジュール)
+- [フロントエンドビルド](#フロントエンドビルド)
+- [リリース](#リリース)
+
 ### 主な機能
 
 - CSV をアップロードしてトポロジを生成
@@ -198,6 +247,23 @@ python app.py
 推奨: Python 3.11
 
 起動後に `http://localhost:8000` を開いて CSV をアップロードします。
+
+### ディレクトリ構成
+
+```text
+.
+├── app.py                      # Flask アプリ本体と API ルート
+├── nbcart/                     # ドメイン/CSV解析/グラフ生成/エクスポート
+├── templates/                  # Jinja2 テンプレート
+├── static/                     # 実行時フロントエンド資産（fallback + dist）
+├── frontend/src/               # フロントエンドソース（TypeScript）
+├── migrations/                 # SQL マイグレーション
+├── scripts/                    # 同期・検証ユーティリティ
+├── tests/                      # テストコード
+├── docs/                       # 設計/API/リリース文書
+├── data/                       # 実行データ（SQLite/アップロード/結果。Git管理外）
+└── import/                     # ローカル投入ファイル（`.gitkeep` 以外はGit管理外）
+```
 
 ### 一般ユーザ向けテストファイル
 
