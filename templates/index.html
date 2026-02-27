@@ -6,6 +6,7 @@
   <title>NetBox Cable Diagram Generator</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <script src="https://unpkg.com/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/cytoscape-svg@0.4.0/cytoscape-svg.js"></script>
   <script src="https://unpkg.com/elkjs@0.9.3/lib/elk.bundled.js"></script>
 </head>
 <body>
@@ -148,6 +149,8 @@
         <button id="resetViewBtn" type="button">Reset View</button>
         <button id="saveLayoutBtn" type="button">Save Layout</button>
         <button id="loadLayoutBtn" type="button">Load Layout</button>
+        <button id="downloadSvgBtn" type="button">Download SVG</button>
+        <button id="downloadDrawioLayoutBtn" type="button">Download drawio (Current Layout)</button>
       </section>
       <div class="cy-wrap">
         <div id="cy"></div>
@@ -160,6 +163,8 @@
               </button>
             {% endfor %}
           </div>
+          <h3>Node Types</h3>
+          <div id="nodeLegendItems"></div>
         </aside>
       </div>
       <section class="role-stats" id="roleStats"></section>
@@ -173,6 +178,10 @@
         </select>
         <label for="componentSelect">Visible Component:</label>
         <select id="componentSelect"></select>
+        <label for="nodeTypeSelect">Node Type:</label>
+        <select id="nodeTypeSelect">
+          <option value="all">All Node Types</option>
+        </select>
         <label><input id="showServers" type="checkbox"> Show Servers</label>
       </section>
       <details class="rack-folders">
@@ -182,11 +191,24 @@
 
       <details>
         <summary>Connection List</summary>
-        <table>
+        <table id="connectionsTable">
           <thead><tr><th>A Rack</th><th>A Device</th><th>A Interface</th><th>A Endpoint Type</th><th>B Rack</th><th>B Device</th><th>B Interface</th><th>B Endpoint Type</th><th>Cable</th><th>Cable Type</th><th>Color</th><th>Domain</th></tr></thead>
           <tbody>
           {% for r in rows %}
-            <tr>
+            <tr
+              data-a-device="{{ r.a_device }}"
+              data-b-device="{{ r.b_device }}"
+              data-a-rack="{{ r.rack_a or '-' }}"
+              data-b-rack="{{ r.rack_b or '-' }}"
+              data-a-interface="{{ r.a_interface }}"
+              data-b-interface="{{ r.b_interface }}"
+              data-a-type="{{ r.a_type }}"
+              data-b-type="{{ r.b_type }}"
+              data-cable-label="{{ r.cable_label }}"
+              data-cable-type="{{ r.cable_type }}"
+              data-color="{{ r.cable_color }}"
+              data-domain="{{ r.domain }}"
+            >
               <td>{{ r.rack_a or '-' }}</td>
               <td>{{ r.a_device }}</td>
               <td>{{ r.a_interface }}</td>

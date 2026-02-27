@@ -146,6 +146,26 @@ def build_drawio_xml(elements: list[dict[str, Any]], diagram_name: str) -> str:
     rack_width = 520
     start_x = 60
 
+    positioned_centers: dict[str, tuple[float, float]] = {}
+    for el in device_nodes:
+        data = el.get("data", {})
+        node_id = str(data.get("id", ""))
+        pos = el.get("position")
+        if not isinstance(pos, dict):
+            continue
+        x = pos.get("x")
+        y = pos.get("y")
+        if isinstance(x, (int, float)) and isinstance(y, (int, float)):
+            positioned_centers[node_id] = (float(x), float(y))
+
+    if positioned_centers:
+        min_x = min(v[0] for v in positioned_centers.values())
+        min_y = min(v[1] for v in positioned_centers.values())
+        positioned_centers = {
+            node_id: (x - min_x + 140.0, y - min_y + 140.0)
+            for node_id, (x, y) in positioned_centers.items()
+        }
+
     node_id_map: dict[str, str] = {}
     node_geom_by_id: dict[str, tuple[float, float, int, int]] = {}
     xml_parts: list[str] = [
@@ -223,9 +243,12 @@ def build_drawio_xml(elements: list[dict[str, Any]], diagram_name: str) -> str:
         role_gap = 360 if role in {"server", "powered_device"} else 420
         start_bucket_x = center_x - ((bucket_count - 1) * role_gap) / 2
         x_center = start_bucket_x + bucket_index * role_gap
+        y_center = float(y_map.get(role, y_map["leaf"]))
+        if source_id in positioned_centers:
+            x_center, y_center = positioned_centers[source_id]
         node_w, node_h = size_map.get(role, (148, 54))
         x = int(x_center - node_w / 2)
-        y = int(y_map.get(role, y_map["leaf"]) - node_h / 2)
+        y = int(y_center - node_h / 2)
         node_geom_by_id[draw_id] = (x_center, y + node_h / 2, node_w, node_h)
         xml_parts.append(
             f'        <mxCell id="{draw_id}" value="{xml_attr(value)}" '

@@ -218,6 +218,51 @@ class AppLogicTests(unittest.TestCase):
         self.assertIn("exitX=", xml)
         self.assertIn("entryX=", xml)
 
+    def test_build_drawio_xml_honors_provided_positions(self):
+        elements = [
+            {
+                "data": {
+                    "id": "rack::R1",
+                    "label": "R1",
+                    "node_type": "rack",
+                },
+                "classes": "rack-group",
+            },
+            {
+                "data": {
+                    "id": "dev::sw1",
+                    "label": "sw1",
+                    "node_type": "device",
+                    "role_hint": "patch_panel",
+                    "rack": "R1",
+                },
+                "position": {"x": 500, "y": 900},
+            },
+            {
+                "data": {
+                    "id": "dev::sw2",
+                    "label": "sw2",
+                    "node_type": "device",
+                    "role_hint": "patch_panel",
+                    "rack": "R1",
+                },
+                "position": {"x": 700, "y": 1100},
+            },
+            {
+                "data": {
+                    "id": "d1",
+                    "source": "dev::sw1",
+                    "target": "dev::sw2",
+                    "label": "link-1",
+                    "color": "#0f766e",
+                    "domain": "data",
+                }
+            },
+        ]
+        xml = build_drawio_xml(elements, diagram_name="Positioned")
+        self.assertIn('<mxGeometry x="66" y="113" width="148" height="54" as="geometry"/>', xml)
+        self.assertIn('<mxGeometry x="266" y="313" width="148" height="54" as="geometry"/>', xml)
+
 
 class UploadSecurityTests(unittest.TestCase):
     def setUp(self):
@@ -339,6 +384,44 @@ class UploadSecurityTests(unittest.TestCase):
         export_resp = self.client.get(f"/api/exports/{import_id}?format=drawio")
         self.assertEqual(export_resp.status_code, 200)
         self.assertIn("application/xml", export_resp.content_type)
+
+    def test_api_export_drawio_layout_uses_positions(self):
+        csv_bytes = (
+            "Termination A Device,Termination A Name,Termination B Device,Termination B Name,Type\n"
+            "sw1,xe-0/0/1,sw2,xe-0/0/2,Cat6\n"
+        ).encode("utf-8")
+        create_resp = self.client.post(
+            "/api/imports",
+            data={"csv_file": (io.BytesIO(csv_bytes), "api-layout.csv")},
+            content_type="multipart/form-data",
+        )
+        body = create_resp.get_json()
+        self.assertIsNotNone(body)
+        assert body is not None
+        import_id = body["import_id"]
+        self.client.put(
+            f"/api/imports/{import_id}/mapping",
+            json={"mapping": body["mapping_candidates"]},
+        )
+        self.client.post(f"/api/imports/{import_id}/execute")
+        run_resp = self.client.get(f"/api/imports/{import_id}")
+        run_body = run_resp.get_json()
+        self.assertIsNotNone(run_body)
+        assert run_body is not None
+        result_id = run_body["result_id"]
+
+        export_resp = self.client.post(
+            f"/api/results/{result_id}/drawio-layout",
+            json={
+                "positions": {
+                    "dev::sw1": {"x": 500, "y": 900},
+                    "dev::sw2": {"x": 700, "y": 1100},
+                }
+            },
+        )
+        self.assertEqual(export_resp.status_code, 200)
+        xml = export_resp.get_data(as_text=True)
+        self.assertIn('<mxGeometry x="81" y="117"', xml)
 
     def test_api_import_requires_file(self):
         response = self.client.post("/api/imports", data={}, content_type="multipart/form-data")

@@ -131,6 +131,40 @@ paths:
           description: Import not found
         '409':
           description: Import not completed
+  /api/results/{result_id}/drawio-layout:
+    post:
+      summary: Export drawio using provided node layout positions
+      parameters:
+        - in: path
+          name: result_id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [positions]
+              properties:
+                positions:
+                  type: object
+                  additionalProperties:
+                    type: object
+                    required: [x, y]
+                    properties:
+                      x:
+                        type: number
+                      y:
+                        type: number
+      responses:
+        '200':
+          description: Drawio XML stream
+        '400':
+          description: Invalid positions payload
+        '404':
+          description: Result not found
   /api/openapi.yaml:
     get:
       summary: Download OpenAPI specification

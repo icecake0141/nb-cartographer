@@ -3,6 +3,7 @@ export function initDiagram() {
         const deviceElements = boot.deviceElements || [];
         const select = document.getElementById('componentSelect');
         const rackSelect = document.getElementById('rackSelect');
+        const nodeTypeSelect = document.getElementById('nodeTypeSelect');
         const showServers = document.getElementById('showServers');
         const rackFolders = document.getElementById('rackFolders');
         const roleStats = document.getElementById('roleStats');
@@ -14,13 +15,20 @@ export function initDiagram() {
         const resetViewBtn = document.getElementById('resetViewBtn');
         const saveLayoutBtn = document.getElementById('saveLayoutBtn');
         const loadLayoutBtn = document.getElementById('loadLayoutBtn');
+        const downloadSvgBtn = document.getElementById('downloadSvgBtn');
+        const downloadDrawioLayoutBtn = document.getElementById('downloadDrawioLayoutBtn');
         const legendItems = document.getElementById('edgeLegendItems');
+        const nodeLegendItems = document.getElementById('nodeLegendItems');
+        const connectionsTable = document.getElementById('connectionsTable');
         let cy = null;
         let comps = [];
         let hiddenServerRacks = new Set();
         let hiddenCableTypes = new Set();
+        let hiddenNodeRoles = new Set();
         let focusNodeIds = null;
-        if (!deviceElements.length || !select || !rackSelect || !legendItems) return;
+        let selectedEdgePairKey = null;
+        let selectedNodeId = null;
+        if (!deviceElements.length || !select || !rackSelect || !legendItems || !nodeTypeSelect) return;
 
         function deviceStyle() {
           return [
@@ -149,7 +157,31 @@ export function initDiagram() {
             { selector: 'edge[domain = "power"]', style: { 'line-style': 'dashed', 'opacity': 0.9 } },
             { selector: 'edge[domain = "circuit"]', style: { 'line-style': 'dotted', 'width': 4 } },
             { selector: 'edge[domain = "pass_through"]', style: { 'line-style': 'solid', 'width': 3 } },
-            { selector: '.filtered-out', style: { 'display': 'none' } }
+            { selector: '.filtered-out', style: { 'display': 'none' } },
+            {
+              selector: 'edge.connection-highlight',
+              style: {
+                'line-color': '#f59e0b',
+                'width': 8,
+                'z-index': 1000,
+              }
+            },
+            {
+              selector: 'node.connection-highlight',
+              style: {
+                'border-width': 6,
+                'border-color': '#f59e0b',
+                'z-index': 1000,
+              }
+            },
+            {
+              selector: 'node.connection-neighbor',
+              style: {
+                'border-width': 5,
+                'border-color': '#f97316',
+                'z-index': 950,
+              }
+            }
           ];
         }
 
@@ -630,6 +662,18 @@ export function initDiagram() {
           return rackDevices.union(rackEdges).union(peerDevices);
         }
 
+        function nodeTypeKeep(value) {
+          const all = cy.elements();
+          const hiddenNodes = cy.nodes('node.device-summary').filter((n) => hiddenNodeRoles.has(n.data('role') || ''));
+          const visibleByLegend = all.difference(hiddenNodes).difference(hiddenNodes.connectedEdges());
+          if (value === 'all') return visibleByLegend;
+          const selectedNodes = cy.nodes(`node.device-summary[role = "${value}"]`);
+          if (selectedNodes.empty()) return cy.collection();
+          const selectedEdges = selectedNodes.connectedEdges();
+          const peers = selectedEdges.connectedNodes('node.device-summary');
+          return selectedNodes.union(selectedEdges).union(peers).intersection(visibleByLegend);
+        }
+
         function serverKeep() {
           const all = cy.elements();
           const serverNodes = cy.nodes('node.device-summary[role = "server"]');
@@ -751,20 +795,223 @@ export function initDiagram() {
           });
         }
 
+        function edgePairKeyByDevices(aDevice, bDevice) {
+          const a = `dev::${aDevice || ''}`;
+          const b = `dev::${bDevice || ''}`;
+          return a <= b ? `${a}||${b}` : `${b}||${a}`;
+        }
+
+        function edgePairKey(edge) {
+          const a = edge.data('source') || '';
+          const b = edge.data('target') || '';
+          return a <= b ? `${a}||${b}` : `${b}||${a}`;
+        }
+
+        function rowMatchesSelection(row) {
+          if (selectedEdgePairKey) {
+            const rowPair = edgePairKeyByDevices(row.dataset.aDevice, row.dataset.bDevice);
+            return rowPair === selectedEdgePairKey;
+          }
+          if (selectedNodeId) {
+            const rowA = `dev::${row.dataset.aDevice || ''}`;
+            const rowB = `dev::${row.dataset.bDevice || ''}`;
+            return rowA === selectedNodeId || rowB === selectedNodeId;
+          }
+          return false;
+        }
+
+        function applyConnectionSelection() {
+          cy.elements().removeClass('connection-highlight connection-neighbor');
+          if (!selectedEdgePairKey && !selectedNodeId) {
+            if (connectionsTable) {
+              connectionsTable.querySelectorAll('tbody tr').forEach((row) => row.classList.remove('is-selected'));
+            }
+            return;
+          }
+          if (selectedEdgePairKey) {
+            const edges = cy.edges().filter((e) => edgePairKey(e) === selectedEdgePairKey);
+            edges.addClass('connection-highlight');
+            edges.connectedNodes('node.device-summary').addClass('connection-highlight');
+          }
+          if (selectedNodeId) {
+            const node = cy.getElementById(selectedNodeId);
+            if (node.nonempty()) {
+              node.addClass('connection-highlight');
+              node.connectedEdges().addClass('connection-highlight');
+              node.connectedEdges().connectedNodes('node.device-summary').difference(node).addClass('connection-neighbor');
+            }
+          }
+          if (connectionsTable) {
+            connectionsTable.querySelectorAll('tbody tr').forEach((row) => {
+              row.classList.toggle('is-selected', rowMatchesSelection(row));
+            });
+          }
+        }
+
+        function buildNodeTypeControls() {
+          const roleOrder = ['core', 'leaf', 'server', 'powered_device', 'pdu', 'power_source', 'patch_panel', 'external'];
+          const counts = {};
+          cy.nodes('node.device-summary').forEach((n) => {
+            const role = n.data('role') || 'leaf';
+            counts[role] = (counts[role] || 0) + 1;
+          });
+
+          nodeTypeSelect.innerHTML = '';
+          const allOpt = document.createElement('option');
+          allOpt.value = 'all';
+          allOpt.textContent = 'All Node Types';
+          nodeTypeSelect.appendChild(allOpt);
+          roleOrder.forEach((role) => {
+            if (!counts[role]) return;
+            const opt = document.createElement('option');
+            opt.value = role;
+            opt.textContent = `${role} (${counts[role]})`;
+            nodeTypeSelect.appendChild(opt);
+          });
+
+          if (!nodeLegendItems) return;
+          nodeLegendItems.innerHTML = '';
+          roleOrder.forEach((role) => {
+            if (!counts[role]) return;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'legend-item';
+            btn.dataset.nodeRole = role;
+            btn.textContent = `${role} (${counts[role]})`;
+            btn.addEventListener('click', () => {
+              if (hiddenNodeRoles.has(role)) {
+                hiddenNodeRoles.delete(role);
+                btn.classList.remove('inactive');
+              } else {
+                hiddenNodeRoles.add(role);
+                btn.classList.add('inactive');
+                if (nodeTypeSelect.value === role) nodeTypeSelect.value = 'all';
+              }
+              applyFilters();
+            });
+            nodeLegendItems.appendChild(btn);
+          });
+        }
+
+        function buildLayoutPositionsPayload() {
+          const positions = {};
+          cy.nodes('node.device-summary').forEach((n) => {
+            positions[n.id()] = n.position();
+          });
+          return positions;
+        }
+
+        function triggerBlobDownload(blob, filename) {
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = filename;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        }
+
+        function downloadCurrentSvg() {
+          if (typeof cy.svg !== 'function') {
+            window.alert('SVG export plugin is unavailable in this browser session.');
+            return;
+          }
+          const svg = cy.svg({ full: true, scale: 1, bg: '#f8fafc' });
+          const resultId = String(boot.resultId || 'latest');
+          const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+          triggerBlobDownload(blob, `result-${resultId}-layout.svg`);
+        }
+
+        async function downloadDrawioWithCurrentLayout() {
+          const resultId = String(boot.resultId || '').trim();
+          if (!/^\d+$/.test(resultId)) {
+            window.alert('Current result ID is not available for drawio export.');
+            return;
+          }
+          const payload = { positions: buildLayoutPositionsPayload() };
+          const resp = await fetch(`/api/results/${resultId}/drawio-layout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(text || 'drawio export failed');
+          }
+          const blob = await resp.blob();
+          triggerBlobDownload(blob, `result-${resultId}-layout.drawio`);
+        }
+
+        function setupConnectionTableInteractions() {
+          if (!connectionsTable) return;
+          const headerCells = [...connectionsTable.querySelectorAll('thead tr:first-child th')];
+          if (!headerCells.length) return;
+          const filterRow = document.createElement('tr');
+          filterRow.className = 'connection-filter-row';
+          headerCells.forEach((_, idx) => {
+            const th = document.createElement('th');
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.dataset.colIndex = String(idx);
+            input.placeholder = 'filter';
+            input.className = 'connection-filter-input';
+            input.addEventListener('input', () => {
+              const filters = [...connectionsTable.querySelectorAll('.connection-filter-input')];
+              const rows = [...connectionsTable.querySelectorAll('tbody tr')];
+              rows.forEach((row) => {
+                const match = filters.every((f) => {
+                  const colIdx = Number(f.dataset.colIndex || '0');
+                  const q = (f.value || '').trim().toLowerCase();
+                  if (!q) return true;
+                  const cell = row.cells[colIdx];
+                  if (!cell) return false;
+                  return (cell.textContent || '').toLowerCase().includes(q);
+                });
+                row.classList.toggle('row-hidden', !match);
+              });
+            });
+            th.appendChild(input);
+            filterRow.appendChild(th);
+          });
+          const thead = connectionsTable.querySelector('thead');
+          thead.appendChild(filterRow);
+
+          connectionsTable.querySelectorAll('tbody tr').forEach((row) => {
+            row.addEventListener('click', () => {
+              const key = edgePairKeyByDevices(row.dataset.aDevice, row.dataset.bDevice);
+              if (selectedEdgePairKey === key && !selectedNodeId) {
+                selectedEdgePairKey = null;
+              } else {
+                selectedEdgePairKey = key;
+                selectedNodeId = null;
+              }
+              applyConnectionSelection();
+            });
+          });
+        }
+
         function applyFilters() {
           cy.elements().removeClass('filtered-out');
           const byComp = componentKeep(select.value);
           const byRack = rackKeep(rackSelect.value);
+          const byNodeType = nodeTypeKeep(nodeTypeSelect.value);
           const byServer = serverKeep();
           const byCable = cableTypeKeep();
           const byFocus = focusKeep();
-          const keepBase = byComp.intersection(byRack).intersection(byServer).intersection(byCable).intersection(byFocus);
+          const keepBase = byComp.intersection(byRack).intersection(byNodeType).intersection(byServer).intersection(byCable).intersection(byFocus);
           const keep = keepBase.union(keepBase.parents());
           cy.elements().difference(keep).addClass('filtered-out');
           if (!keep.empty()) {
             applyReadableSpacing();
             fitVisibleWithMinZoom(keep, 34, 0.68);
           }
+          applyConnectionSelection();
+        }
+
+        if (window.cytoscape && typeof window.cytoscape.use === 'function') {
+          const svgPlugin = window.cytoscapeSvg || window['cytoscape-svg'];
+          if (svgPlugin) window.cytoscape.use(svgPlugin);
         }
 
         cy = cytoscape({
@@ -786,8 +1033,11 @@ export function initDiagram() {
         loadLayoutFromStorage();
         buildComponents();
         buildRackFolders();
+        buildNodeTypeControls();
+        setupConnectionTableInteractions();
         fillSelector();
         showServers.checked = false;
+        nodeTypeSelect.value = 'all';
         applyLabelLevel('standard');
         if (comps.length > 1) {
           select.value = '0';
@@ -798,6 +1048,7 @@ export function initDiagram() {
         }
         select.addEventListener('change', applyFilters);
         rackSelect.addEventListener('change', applyFilters);
+        nodeTypeSelect.addEventListener('change', applyFilters);
         showServers.addEventListener('change', applyFilters);
         labelLevel.addEventListener('change', () => applyLabelLevel(labelLevel.value));
         focusBtn.addEventListener('click', () => {
@@ -820,6 +1071,20 @@ export function initDiagram() {
         loadLayoutBtn.addEventListener('click', () => {
           if (loadLayoutFromStorage()) applyFilters();
         });
+        if (downloadSvgBtn) {
+          downloadSvgBtn.addEventListener('click', () => {
+            downloadCurrentSvg();
+          });
+        }
+        if (downloadDrawioLayoutBtn) {
+          downloadDrawioLayoutBtn.addEventListener('click', async () => {
+            try {
+              await downloadDrawioWithCurrentLayout();
+            } catch (err) {
+              window.alert(`drawio export failed: ${String(err)}`);
+            }
+          });
+        }
         legendItems.querySelectorAll('.legend-item').forEach((btn) => {
           btn.addEventListener('click', () => {
             const t = btn.dataset.cableType || '';
@@ -832,6 +1097,23 @@ export function initDiagram() {
             }
             applyFilters();
           });
+        });
+        cy.on('tap', 'edge', (evt) => {
+          selectedEdgePairKey = edgePairKey(evt.target);
+          selectedNodeId = null;
+          applyConnectionSelection();
+        });
+        cy.on('tap', 'node.device-summary', (evt) => {
+          selectedNodeId = evt.target.id();
+          selectedEdgePairKey = null;
+          applyConnectionSelection();
+        });
+        cy.on('tap', (evt) => {
+          if (evt.target === cy) {
+            selectedNodeId = null;
+            selectedEdgePairKey = null;
+            applyConnectionSelection();
+          }
         });
 
 }

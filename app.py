@@ -465,6 +465,51 @@ def create_app() -> Flask:
             abort(404)
         return send_file(path, as_attachment=True, download_name=download_name)
 
+    @flask_app.post("/api/results/<int:result_id>/drawio-layout")
+    def api_export_drawio_with_layout(result_id: int):
+        record = get_result(result_id)
+        if not record:
+            return jsonify({"error": "Result not found."}), 404
+
+        payload = request.get_json(silent=True) or {}
+        positions = payload.get("positions")
+        if not isinstance(positions, dict):
+            return jsonify({"error": "positions object is required."}), 400
+
+        rows_path = resolve_data_path(record["rows_path"])
+        if not rows_path.exists():
+            return jsonify({"error": "Rows file missing."}), 404
+        row_items = json.loads(rows_path.read_text(encoding="utf-8"))
+        rows = [CableRow(**item) for item in row_items]
+        device_nodes, device_edges = build_device_graph(rows)
+
+        normalized_positions: dict[str, dict[str, float]] = {}
+        for node_id, pos in positions.items():
+            if not isinstance(node_id, str) or not isinstance(pos, dict):
+                continue
+            x = pos.get("x")
+            y = pos.get("y")
+            if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
+                continue
+            normalized_positions[node_id] = {"x": float(x), "y": float(y)}
+
+        for node in device_nodes:
+            data = node.get("data", {})
+            node_id = data.get("id")
+            if isinstance(node_id, str) and node_id in normalized_positions:
+                node["position"] = normalized_positions[node_id]
+
+        drawio_xml = build_drawio_xml(
+            device_nodes + device_edges,
+            diagram_name=f"Result-{result_id}",
+        )
+        return send_file(
+            io.BytesIO(drawio_xml.encode("utf-8")),
+            as_attachment=True,
+            download_name=f"result-{result_id}-layout.drawio",
+            mimetype="application/xml",
+        )
+
     @flask_app.post("/api/imports")
     def api_create_import():
         file = request.files.get("csv_file")

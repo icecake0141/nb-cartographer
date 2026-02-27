@@ -128,7 +128,7 @@ a {
   top: 24px;
   right: 16px;
   width: 220px;
-  max-height: 280px;
+  max-height: 420px;
   overflow: auto;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid var(--line);
@@ -154,6 +154,10 @@ a {
   opacity: 0.35;
 }
 
+#nodeLegendItems {
+  margin-bottom: 2px;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -166,6 +170,31 @@ th, td {
   padding: 8px;
   text-align: left;
   font-size: 14px;
+}
+
+#connectionsTable tbody tr {
+  cursor: pointer;
+}
+
+#connectionsTable tbody tr.is-selected {
+  background: #fff7ed;
+}
+
+#connectionsTable tbody tr.row-hidden {
+  display: none;
+}
+
+.connection-filter-row th {
+  background: #f8fafc;
+}
+
+.connection-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12px;
 }
 
 @media (max-width: 768px) {
