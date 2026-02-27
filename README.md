@@ -6,10 +6,14 @@ A Flask app that generates an aggregated topology diagram between devices from a
 
 ### Table of Contents
 
+- [Quick Start](#quick-start)
 - [Key Features](#key-features)
 - [Setup](#setup)
+- [Compatibility / Breaking Changes](#compatibility--breaking-changes)
+- [API Example](#api-example)
 - [Directory Structure](#directory-structure)
 - [Test / Lint / Format](#test--lint--format)
+- [Troubleshooting](#troubleshooting)
 - [Persistence Specification](#persistence-specification)
 - [CSV Column Mapping](#csv-column-mapping)
 - [Data Transformation Rules](#data-transformation-rules)
@@ -19,6 +23,17 @@ A Flask app that generates an aggregated topology diagram between devices from a
 - [Frontend Modules](#frontend-modules)
 - [Frontend Build](#frontend-build)
 - [Release](#release)
+
+### Quick Start
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python app.py
+```
+
+Open `http://localhost:8000` and use the API workflow panel on the page.
 
 ### Key Features
 
@@ -48,6 +63,35 @@ python app.py
 Recommended: Python 3.11
 
 After startup, open `http://localhost:8000` and upload a CSV.
+
+### Compatibility / Breaking Changes
+
+- `POST /upload` is deprecated and returns `410`.
+- Existing saved result endpoints remain available:
+  - `GET /result/<id>`
+  - `GET /files/<id>/<kind>`
+- New clients should use API-first workflow endpoints under `/api/...`.
+
+### API Example
+
+```bash
+# 1) Create import run
+curl -X POST -F "csv_file=@samples/netbox_cables.csv" http://127.0.0.1:8000/api/imports
+
+# 2) Save mapping (use mapping_candidates returned above)
+curl -X PUT -H "Content-Type: application/json" \
+  -d '{"mapping":{"a_device":"Device A","a_port":"Termination A","b_device":"Device B","b_port":"Termination B"}}' \
+  http://127.0.0.1:8000/api/imports/1/mapping
+
+# 3) Execute
+curl -X POST http://127.0.0.1:8000/api/imports/1/execute
+
+# 4) Get graph
+curl "http://127.0.0.1:8000/api/graphs/1?view=device"
+
+# 5) Export drawio
+curl -L "http://127.0.0.1:8000/api/exports/1?format=drawio" -o result.drawio
+```
 
 ### Directory Structure
 
@@ -89,6 +133,18 @@ To auto-format:
 black .
 ruff check . --fix
 ```
+
+### Troubleshooting
+
+- `black --check .` fails:
+  - Run `black .` and commit formatting changes.
+- `mypy . --ignore-missing-imports` fails:
+  - Run mypy locally and fix optional/typed dict mismatches first.
+- Frontend files are out of sync:
+  - Run `python3 scripts/sync_frontend.py`
+  - Verify with `python3 scripts/check_frontend_sync.py`
+- Node toolchain is unavailable:
+  - Use sync scripts above; runtime fallback from `static/dist` to `static/` is enabled.
 
 ### Persistence Specification
 
