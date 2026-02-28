@@ -3,6 +3,7 @@ from subprocess import CompletedProcess
 from unittest.mock import patch
 
 from nbcart.reconcile.collectors.snmp import SnmpLldpCollector
+from nbcart.reconcile.errors import ReconcileError
 
 
 class SnmpCollectorTests(unittest.TestCase):
@@ -69,7 +70,7 @@ class SnmpCollectorTests(unittest.TestCase):
         )
         collector = SnmpLldpCollector()
 
-        with self.assertRaisesRegex(ValueError, "Timeout"):
+        with self.assertRaisesRegex(ReconcileError, "Timeout"):
             collector.collect(
                 seed_device="spine-01",
                 params={"host": "192.0.2.10", "community": "public"},

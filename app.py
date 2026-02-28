@@ -20,7 +20,7 @@ from nbcart.exporters.drawio import build_drawio_xml
 from nbcart.graph import build_device_graph, build_graph, list_racks
 from nbcart.ingest import normalize_color, parse_cables_csv
 from nbcart.models import CableRow
-from nbcart.reconcile import reconcile_links
+from nbcart.reconcile import ReconcileError, reconcile_links
 from nbcart.reconcile.collectors.ssh import SSH_VENDOR_PROFILES
 
 __all__ = [
@@ -950,6 +950,13 @@ def create_app() -> Flask:
                     "report": report,
                 }
             )
+        except ReconcileError as exc:
+            update_reconcile_run(
+                run_id,
+                status="failed",
+                error_message=f"{exc.code}: {exc.message}",
+            )
+            return jsonify(exc.to_dict()), int(exc.http_status)
         except NotImplementedError as exc:
             update_reconcile_run(run_id, status="failed", error_message=str(exc))
             return jsonify({"error": str(exc)}), 501
@@ -1019,6 +1026,8 @@ def create_app() -> Flask:
                 params=params,
             )
             return jsonify({"import_id": import_id, "report": report.to_dict()})
+        except ReconcileError as exc:
+            return jsonify(exc.to_dict()), int(exc.http_status)
         except NotImplementedError as exc:
             return jsonify({"error": str(exc)}), 501
         except Exception as exc:

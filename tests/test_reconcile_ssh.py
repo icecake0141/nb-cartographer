@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from nbcart.reconcile.collectors.ssh import SshLldpCollector
+from nbcart.reconcile.errors import ReconcileError
 
 
 class SshCollectorTests(unittest.TestCase):
@@ -155,7 +156,7 @@ class SshCollectorTests(unittest.TestCase):
 
     def test_collect_rejects_unknown_vendor_profile(self):
         collector = SshLldpCollector()
-        with self.assertRaisesRegex(ValueError, "Unsupported SSH vendor profile"):
+        with self.assertRaisesRegex(ReconcileError, "Unsupported SSH vendor profile"):
             collector.collect(
                 seed_device="spine-01",
                 params={"host": "192.0.2.20", "username": "netops", "vendor": "unknown-os"},

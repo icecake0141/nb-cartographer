@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 
+from ..errors import ReconcileError
 from ..models import LinkRecord
 from ..normalize import normalize_link
 from ..parsers import VENDOR_PARSERS, parse_generic
@@ -53,7 +54,12 @@ class SshLldpCollector:
         normalized = SshLldpCollector._normalize_vendor(vendor)
         profile = SSH_VENDOR_PROFILES.get(normalized)
         if not profile:
-            raise ValueError(f"Unsupported SSH vendor profile: {vendor}")
+            raise ReconcileError(
+                message=f"Unsupported SSH vendor profile: {vendor}",
+                code="unsupported_vendor_profile",
+                stage="collect.ssh.profile",
+                hint="Use /api/reconcile/ssh-vendors to list available profiles.",
+            )
         return profile["command"]
 
     def _collect_from_neighbors_param(
@@ -96,7 +102,13 @@ class SshLldpCollector:
 
     def collect(self, *, seed_device: str, params: dict[str, object]) -> list[LinkRecord]:
         if not seed_device:
-            raise ValueError("seed_device is required for ssh method.")
+            raise ReconcileError(
+                message="seed_device is required for ssh method.",
+                code="missing_seed_device",
+                stage="collect.ssh.validate",
+                hint="Set seed_device to the device you are connecting to.",
+                http_status=400,
+            )
 
         from_param = self._collect_from_neighbors_param(seed_device=seed_device, params=params)
         if from_param:
@@ -114,14 +126,32 @@ class SshLldpCollector:
         timeout = self._int_param(params, "timeout", 10)
 
         if not host:
-            raise ValueError("params.host is required for ssh method.")
+            raise ReconcileError(
+                message="params.host is required for ssh method.",
+                code="missing_host",
+                stage="collect.ssh.validate",
+                hint="Set params.host to the target SSH endpoint.",
+                http_status=400,
+            )
         if not username:
-            raise ValueError("params.username is required for ssh method.")
+            raise ReconcileError(
+                message="params.username is required for ssh method.",
+                code="missing_username",
+                stage="collect.ssh.validate",
+                hint="Set params.username for SSH login.",
+                http_status=400,
+            )
         if not command:
             if vendor:
                 command = self._profile_command(vendor)
             else:
-                raise ValueError("params.command or params.vendor is required for ssh method.")
+                raise ReconcileError(
+                    message="params.command or params.vendor is required for ssh method.",
+                    code="missing_command_or_vendor",
+                    stage="collect.ssh.validate",
+                    hint="Provide params.command or select params.vendor profile.",
+                    http_status=400,
+                )
 
         ssh_cmd = [
             "ssh",
@@ -140,11 +170,22 @@ class SshLldpCollector:
                 text=True,
             )
         except FileNotFoundError as exc:
-            raise NotImplementedError("ssh command is not available.") from exc
+            raise ReconcileError(
+                message="ssh command is not available.",
+                code="ssh_command_missing",
+                stage="collect.ssh.exec",
+                hint="Install ssh client binary on the server.",
+                http_status=501,
+            ) from exc
 
         if proc.returncode != 0:
             detail = proc.stderr.strip() or proc.stdout.strip() or "ssh command failed"
-            raise ValueError(detail)
+            raise ReconcileError(
+                message=detail,
+                code="ssh_command_failed",
+                stage="collect.ssh.exec",
+                hint="Verify host reachability, credentials, and command permissions.",
+            )
 
         parser = VENDOR_PARSERS.get(vendor) if vendor else None
         parser_name = ""
@@ -158,7 +199,12 @@ class SshLldpCollector:
             fallback_used = bool(parser_name)
             parser_name = "generic"
         if not links:
-            raise ValueError("No LLDP neighbors parsed from ssh output.")
+            raise ReconcileError(
+                message="No LLDP neighbors parsed from ssh output.",
+                code="ssh_parse_empty",
+                stage="collect.ssh.parse",
+                hint="Check vendor profile/command output format and LLDP state.",
+            )
         self.last_metadata = {
             "parser": parser_name,
             "vendor": vendor,
