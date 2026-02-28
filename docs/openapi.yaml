@@ -186,6 +186,11 @@ paths:
                 params:
                   type: object
                   additionalProperties: true
+                  description: |
+                    Method-specific options.
+                    payload: { neighbors: [{ local_device, local_interface, remote_device, remote_interface }] }
+                    snmp: { host, community|community_env, timeout?, retries?, port? }
+                    ssh: { neighbors? } or { host, username, command, timeout? }
       responses:
         '201':
           description: Reconcile run created
@@ -248,6 +253,11 @@ paths:
                 params:
                   type: object
                   additionalProperties: true
+                  description: |
+                    Method-specific options.
+                    payload: { neighbors: [{ local_device, local_interface, remote_device, remote_interface }] }
+                    snmp: { host, community|community_env, timeout?, retries?, port? }
+                    ssh: { neighbors? } or { host, username, command, timeout? }
       responses:
         '200':
           description: Reconcile report

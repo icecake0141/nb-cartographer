@@ -98,6 +98,33 @@ curl "http://127.0.0.1:8000/api/graphs/1?view=device"
 curl -L "http://127.0.0.1:8000/api/exports/1?format=drawio" -o result.drawio
 ```
 
+### Reconcile API Example
+
+```bash
+# One-shot compare (does not persist reconcile run)
+curl -X POST -H "Content-Type: application/json" \
+  -d '{
+    "import_id": 1,
+    "method": "payload",
+    "params": {
+      "neighbors": [
+        {"local_device": "sw1", "local_interface": "xe-0/0/1", "remote_device": "sw2", "remote_interface": "xe-0/0/2"}
+      ]
+    }
+  }' \
+  http://127.0.0.1:8000/api/reconcile/compare
+
+# Persisted run with SNMP (recommended: use environment reference)
+curl -X POST -H "Content-Type: application/json" \
+  -d '{
+    "import_id": 1,
+    "method": "snmp",
+    "seed_device": "sw1",
+    "params": {"host": "192.0.2.10", "community_env": "SNMP_COMMUNITY"}
+  }' \
+  http://127.0.0.1:8000/api/reconcile-runs
+```
+
 ### Directory Structure
 
 ```text
