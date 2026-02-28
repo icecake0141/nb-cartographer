@@ -227,6 +227,40 @@ paths:
           description: Reconcile failed (validation/runtime error)
         '501':
           description: Collector backend is unavailable
+  /api/reconcile/compare:
+    post:
+      summary: Execute one-shot reconcile without persisting a reconcile run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [import_id, method, params]
+              properties:
+                import_id:
+                  type: integer
+                method:
+                  type: string
+                  enum: [payload, snmp, ssh]
+                seed_device:
+                  type: string
+                params:
+                  type: object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Reconcile report
+        '400':
+          description: Invalid request payload
+        '404':
+          description: Import or result not found
+        '409':
+          description: Import not completed
+        '422':
+          description: Reconcile failed (validation/runtime error)
+        '501':
+          description: Collector backend is unavailable
   /api/openapi.yaml:
     get:
       summary: Download OpenAPI specification

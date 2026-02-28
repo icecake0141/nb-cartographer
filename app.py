@@ -917,6 +917,53 @@ def create_app() -> Flask:
             }
         )
 
+    @flask_app.post("/api/reconcile/compare")
+    def api_compare_reconcile():
+        payload = request.get_json(silent=True) or {}
+        import_id = payload.get("import_id")
+        method = str(payload.get("method", "payload")).strip().lower()
+        seed_device = str(payload.get("seed_device", "")).strip()
+        params = payload.get("params", {})
+
+        if not isinstance(import_id, int):
+            return jsonify({"error": "import_id (int) is required."}), 400
+        if method not in {"payload", "snmp", "ssh"}:
+            return jsonify({"error": "method must be one of: payload, snmp, ssh."}), 400
+        if not isinstance(params, dict):
+            return jsonify({"error": "params object is required."}), 400
+        if method in {"snmp", "ssh"} and not seed_device:
+            return jsonify({"error": "seed_device is required for snmp/ssh."}), 400
+        validation_error = validate_reconcile_params(method, params)
+        if validation_error:
+            return jsonify({"error": validation_error}), 400
+
+        import_run = get_import_run(import_id)
+        if not import_run:
+            return jsonify({"error": "Import not found."}), 404
+        if import_run["status"] != "completed" or not import_run.get("result_id"):
+            return jsonify({"error": "Import is not completed."}), 409
+        result = get_result(int(import_run["result_id"]))
+        if not result:
+            return jsonify({"error": "Result not found."}), 404
+
+        rows_path = resolve_data_path(result["rows_path"])
+        if not rows_path.exists():
+            return jsonify({"error": "Rows file missing."}), 404
+        rows = [CableRow(**item) for item in json.loads(rows_path.read_text(encoding="utf-8"))]
+
+        try:
+            report = reconcile_links(
+                rows=rows,
+                method=method,
+                seed_device=seed_device,
+                params=params,
+            )
+            return jsonify({"import_id": import_id, "report": report.to_dict()})
+        except NotImplementedError as exc:
+            return jsonify({"error": str(exc)}), 501
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 422
+
     @flask_app.get("/api/openapi.yaml")
     def api_openapi():
         if not OPENAPI_PATH.exists():

@@ -239,6 +239,8 @@ If major columns are missing, the UI shows the undetected column list.
   - Execute topology reconciliation (`payload` works now, `snmp`/`ssh` are pluggable).
 - `GET /api/reconcile-runs/<id>`
   - Check reconcile status and diff report (`missing/unexpected/mismatched`).
+- `POST /api/reconcile/compare`
+  - Run one-shot reconcile without persisting a reconcile run (useful for secret-safe checks).
 - `GET /api/openapi.yaml`
   - Download the pinned OpenAPI contract.
 
@@ -458,6 +460,8 @@ ruff check . --fix
   - トポロジー比較を実行（`payload` は実装済み、`snmp`/`ssh` は差し替え可能）
 - `GET /api/reconcile-runs/<id>`
   - 比較状態と差分レポート（`missing/unexpected/mismatched`）を取得
+- `POST /api/reconcile/compare`
+  - 比較 run を保存せずにワンショット比較を実行（機密情報を残したくない用途向け）
 - `GET /api/openapi.yaml`
   - OpenAPI 契約を取得
 
