@@ -1,21 +1,31 @@
 from __future__ import annotations
 
-import json
-import re
 import subprocess
 
+from ..errors import ReconcileError
 from ..models import LinkRecord
 from ..normalize import normalize_link
+from ..parsers import VENDOR_PARSERS, parse_generic
 
 SSH_VENDOR_PROFILES: dict[str, dict[str, str]] = {
     "arista_eos": {"command": "show lldp neighbors detail | json"},
     "cisco_ios": {"command": "show lldp neighbors detail"},
     "cisco_nxos": {"command": "show lldp neighbors detail | json"},
     "juniper_junos": {"command": "show lldp neighbors detail | display json"},
+    "fortinet_fortiswitch_os": {"command": "get switch lldp neighbors detail"},
+}
+
+SSH_VENDOR_ALIASES = {
+    "foritnet_fortiswitch_os": "fortinet_fortiswitch_os",
+    "fortinet_fortiswitch": "fortinet_fortiswitch_os",
+    "fortiswitch_os": "fortinet_fortiswitch_os",
 }
 
 
 class SshLldpCollector:
+    def __init__(self) -> None:
+        self.last_metadata: dict[str, object] = {}
+
     @staticmethod
     def _int_param(params: dict[str, object], key: str, default: int) -> int:
         value = params.get(key, default)
@@ -33,33 +43,23 @@ class SshLldpCollector:
         return default
 
     @staticmethod
-    def _pick(item: dict[str, object], keys: list[str]) -> str:
-        for key in keys:
-            value = item.get(key)
-            if value is None:
-                continue
-            text = str(value).strip()
-            if text:
-                return text
-        return ""
-
-    @staticmethod
-    def _iter_dicts(value: object) -> list[dict[str, object]]:
-        out: list[dict[str, object]] = []
-        if isinstance(value, dict):
-            out.append(value)
-            for child in value.values():
-                out.extend(SshLldpCollector._iter_dicts(child))
-        elif isinstance(value, list):
-            for item in value:
-                out.extend(SshLldpCollector._iter_dicts(item))
-        return out
+    def _normalize_vendor(vendor: str) -> str:
+        key = vendor.strip().lower()
+        if not key:
+            return ""
+        return SSH_VENDOR_ALIASES.get(key, key)
 
     @staticmethod
     def _profile_command(vendor: str) -> str:
-        profile = SSH_VENDOR_PROFILES.get(vendor)
+        normalized = SshLldpCollector._normalize_vendor(vendor)
+        profile = SSH_VENDOR_PROFILES.get(normalized)
         if not profile:
-            raise ValueError(f"Unsupported SSH vendor profile: {vendor}")
+            raise ReconcileError(
+                message=f"Unsupported SSH vendor profile: {vendor}",
+                code="unsupported_vendor_profile",
+                stage="collect.ssh.profile",
+                hint="Use /api/reconcile/ssh-vendors to list available profiles.",
+            )
         return profile["command"]
 
     def _collect_from_neighbors_param(
@@ -75,196 +75,83 @@ class SshLldpCollector:
         for item in raw_neighbors:
             if not isinstance(item, dict):
                 continue
-            local_interface = self._pick(
-                item,
-                ["local_interface", "local_if", "local_port", "port", "interface"],
-            )
-            remote_device = self._pick(
-                item, ["remote_device", "neighbor", "system_name", "chassis"]
-            )
-            remote_interface = self._pick(
-                item,
-                ["remote_interface", "remote_if", "neighbor_port", "port_id"],
-            )
+            local_interface = ""
+            for key in ["local_interface", "local_if", "local_port", "port", "interface"]:
+                v = str(item.get(key, "")).strip()
+                if v:
+                    local_interface = v
+                    break
+            remote_device = ""
+            for key in ["remote_device", "neighbor", "system_name", "chassis"]:
+                v = str(item.get(key, "")).strip()
+                if v:
+                    remote_device = v
+                    break
+            remote_interface = ""
+            for key in ["remote_interface", "remote_if", "neighbor_port", "port_id"]:
+                v = str(item.get(key, "")).strip()
+                if v:
+                    remote_interface = v
+                    break
             if not all((local_interface, remote_device, remote_interface)):
                 continue
             links.append(
                 normalize_link(seed_device, local_interface, remote_device, remote_interface)
             )
-        return links
-
-    @staticmethod
-    def _parse_stdout_to_links(seed_device: str, stdout: str) -> list[LinkRecord]:
-        text = stdout.strip()
-        if not text:
-            return []
-
-        links: list[LinkRecord] = []
-        try:
-            payload = json.loads(text)
-            for item in SshLldpCollector._iter_dicts(payload):
-                local_interface = SshLldpCollector._pick(
-                    item,
-                    [
-                        "local_interface",
-                        "local_if",
-                        "local_port",
-                        "port",
-                        "interface",
-                        "port_description",
-                    ],
-                )
-                remote_device = SshLldpCollector._pick(
-                    item,
-                    [
-                        "remote_device",
-                        "neighbor",
-                        "system_name",
-                        "chassis",
-                        "device_id",
-                    ],
-                )
-                remote_interface = SshLldpCollector._pick(
-                    item,
-                    [
-                        "remote_interface",
-                        "remote_if",
-                        "neighbor_port",
-                        "port_id",
-                        "port_description",
-                    ],
-                )
-                if not all((local_interface, remote_device, remote_interface)):
-                    continue
-                links.append(
-                    normalize_link(seed_device, local_interface, remote_device, remote_interface)
-                )
-            if links:
-                unique = list(
-                    {
-                        (
-                            link.left.device,
-                            link.left.interface,
-                            link.right.device,
-                            link.right.interface,
-                        ): link
-                        for link in links
-                    }.values()
-                )
-                return unique
-        except json.JSONDecodeError:
-            pass
-
-        block_local = ""
-        block_remote_device = ""
-        block_remote_port = ""
-        kv_patterns = [
-            (
-                re.compile(r"^\s*(?:Local (?:Intf|Interface)|Interface)\s*:?\s*(.+?)\s*$", re.I),
-                "local",
-            ),
-            (
-                re.compile(r"^\s*(?:System Name|Device ID|Chassis id)\s*:?\s*(.+?)\s*$", re.I),
-                "remote_device",
-            ),
-            (
-                re.compile(r"^\s*(?:Port id|Port ID|Port Description)\s*:?\s*(.+?)\s*$", re.I),
-                "remote_port",
-            ),
-        ]
-
-        def flush_block() -> None:
-            nonlocal block_local, block_remote_device, block_remote_port
-            if block_local and block_remote_device and block_remote_port:
-                links.append(
-                    normalize_link(seed_device, block_local, block_remote_device, block_remote_port)
-                )
-            block_local = ""
-            block_remote_device = ""
-            block_remote_port = ""
-
-        for line in text.splitlines():
-            if not line.strip() or re.fullmatch(r"[-=]{3,}", line.strip()):
-                flush_block()
-                continue
-
-            matched = False
-            for regex, kind in kv_patterns:
-                m = regex.match(line)
-                if not m:
-                    continue
-                value = m.group(1).strip()
-                if kind == "local":
-                    block_local = value
-                elif kind == "remote_device":
-                    block_remote_device = value
-                else:
-                    block_remote_port = value
-                matched = True
-                break
-            if matched:
-                continue
-
-            pipe_parts = [
-                part.strip() for part in re.split(r"\s*\|\s*", line.strip()) if part.strip()
-            ]
-            if len(pipe_parts) >= 3:
-                local_interface, remote_device, remote_interface = pipe_parts[:3]
-                if all((local_interface, remote_device, remote_interface)):
-                    links.append(
-                        normalize_link(
-                            seed_device, local_interface, remote_device, remote_interface
-                        )
-                    )
-                    continue
-
-            parts = [part.strip() for part in line.split(",")]
-            if len(parts) < 3:
-                continue
-            local_interface, remote_device, remote_interface = parts[:3]
-            if not all((local_interface, remote_device, remote_interface)):
-                continue
-            links.append(
-                normalize_link(seed_device, local_interface, remote_device, remote_interface)
-            )
-        flush_block()
-
-        links = list(
-            {
-                (
-                    link.left.device,
-                    link.left.interface,
-                    link.right.device,
-                    link.right.interface,
-                ): link
-                for link in links
-            }.values()
-        )
         return links
 
     def collect(self, *, seed_device: str, params: dict[str, object]) -> list[LinkRecord]:
         if not seed_device:
-            raise ValueError("seed_device is required for ssh method.")
+            raise ReconcileError(
+                message="seed_device is required for ssh method.",
+                code="missing_seed_device",
+                stage="collect.ssh.validate",
+                hint="Set seed_device to the device you are connecting to.",
+                http_status=400,
+            )
 
         from_param = self._collect_from_neighbors_param(seed_device=seed_device, params=params)
         if from_param:
+            self.last_metadata = {
+                "parser": "neighbors_payload",
+                "vendor": "",
+                "parser_fallback_used": False,
+            }
             return from_param
 
         host = str(params.get("host", "")).strip()
         username = str(params.get("username", "")).strip()
         command = str(params.get("command", "")).strip()
-        vendor = str(params.get("vendor", "")).strip().lower()
+        vendor = self._normalize_vendor(str(params.get("vendor", "")))
         timeout = self._int_param(params, "timeout", 10)
 
         if not host:
-            raise ValueError("params.host is required for ssh method.")
+            raise ReconcileError(
+                message="params.host is required for ssh method.",
+                code="missing_host",
+                stage="collect.ssh.validate",
+                hint="Set params.host to the target SSH endpoint.",
+                http_status=400,
+            )
         if not username:
-            raise ValueError("params.username is required for ssh method.")
+            raise ReconcileError(
+                message="params.username is required for ssh method.",
+                code="missing_username",
+                stage="collect.ssh.validate",
+                hint="Set params.username for SSH login.",
+                http_status=400,
+            )
         if not command:
             if vendor:
                 command = self._profile_command(vendor)
             else:
-                raise ValueError("params.command or params.vendor is required for ssh method.")
+                raise ReconcileError(
+                    message="params.command or params.vendor is required for ssh method.",
+                    code="missing_command_or_vendor",
+                    stage="collect.ssh.validate",
+                    hint="Provide params.command or select params.vendor profile.",
+                    http_status=400,
+                )
 
         ssh_cmd = [
             "ssh",
@@ -283,13 +170,45 @@ class SshLldpCollector:
                 text=True,
             )
         except FileNotFoundError as exc:
-            raise NotImplementedError("ssh command is not available.") from exc
+            raise ReconcileError(
+                message="ssh command is not available.",
+                code="ssh_command_missing",
+                stage="collect.ssh.exec",
+                hint="Install ssh client binary on the server.",
+                http_status=501,
+            ) from exc
 
         if proc.returncode != 0:
             detail = proc.stderr.strip() or proc.stdout.strip() or "ssh command failed"
-            raise ValueError(detail)
+            raise ReconcileError(
+                message=detail,
+                code="ssh_command_failed",
+                stage="collect.ssh.exec",
+                hint="Verify host reachability, credentials, and command permissions.",
+            )
 
-        links = self._parse_stdout_to_links(seed_device, proc.stdout)
+        parser = VENDOR_PARSERS.get(vendor) if vendor else None
+        parser_name = ""
+        links = []
+        if parser:
+            parser_name = f"vendor::{vendor}"
+            links = parser(seed_device, proc.stdout)
+        fallback_used = False
         if not links:
-            raise ValueError("No LLDP neighbors parsed from ssh output.")
+            links = parse_generic(seed_device, proc.stdout)
+            fallback_used = bool(parser_name)
+            parser_name = "generic"
+        if not links:
+            raise ReconcileError(
+                message="No LLDP neighbors parsed from ssh output.",
+                code="ssh_parse_empty",
+                stage="collect.ssh.parse",
+                hint="Check vendor profile/command output format and LLDP state.",
+            )
+        self.last_metadata = {
+            "parser": parser_name,
+            "vendor": vendor,
+            "command": command,
+            "parser_fallback_used": fallback_used,
+        }
         return links

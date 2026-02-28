@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 
+from ..errors import ReconcileError
 from ..models import LinkRecord
 from ..normalize import normalize_link
 
@@ -14,6 +15,9 @@ IF_NAME_OID = ".1.3.6.1.2.1.31.1.1.1.1"
 
 
 class SnmpLldpCollector:
+    def __init__(self) -> None:
+        self.last_metadata: dict[str, object] = {}
+
     @staticmethod
     def _int_param(params: dict[str, object], key: str, default: int) -> int:
         value = params.get(key, default)
@@ -71,10 +75,21 @@ class SnmpLldpCollector:
                 text=True,
             )
         except FileNotFoundError as exc:
-            raise NotImplementedError("snmpwalk command is not available.") from exc
+            raise ReconcileError(
+                message="snmpwalk command is not available.",
+                code="snmpwalk_missing",
+                stage="collect.snmp.exec",
+                hint="Install net-snmp tools on the server.",
+                http_status=501,
+            ) from exc
         if proc.returncode != 0:
             detail = proc.stderr.strip() or proc.stdout.strip() or "snmpwalk failed"
-            raise ValueError(detail)
+            raise ReconcileError(
+                message=detail,
+                code="snmpwalk_failed",
+                stage="collect.snmp.exec",
+                hint="Check host/community/reachability and SNMP ACL settings.",
+            )
         return proc.stdout
 
     @staticmethod
@@ -104,13 +119,29 @@ class SnmpLldpCollector:
         port = self._int_param(params, "port", 161)
 
         if not host:
-            raise ValueError("params.host is required for snmp method.")
+            raise ReconcileError(
+                message="params.host is required for snmp method.",
+                code="missing_host",
+                stage="collect.snmp.validate",
+                hint="Set params.host to the SNMP endpoint.",
+                http_status=400,
+            )
         if not community:
-            raise ValueError(
-                "SNMP community is required. Set params.community or params.community_env."
+            raise ReconcileError(
+                message="SNMP community is required. Set params.community or params.community_env.",
+                code="missing_community",
+                stage="collect.snmp.validate",
+                hint="Provide community directly or via environment variable name.",
+                http_status=400,
             )
         if not seed_device:
-            raise ValueError("seed_device is required for snmp method.")
+            raise ReconcileError(
+                message="seed_device is required for snmp method.",
+                code="missing_seed_device",
+                stage="collect.snmp.validate",
+                hint="Set seed_device to the starting device name.",
+                http_status=400,
+            )
 
         sysname_out = self._run_walk(
             host=host,
@@ -200,4 +231,11 @@ class SnmpLldpCollector:
                     remote_interface,
                 )
             )
+        self.last_metadata = {
+            "parser": "snmp_lldp_mib",
+            "host": host,
+            "remote_sys_entries": len(remote_sys_by_key),
+            "remote_port_entries": len(remote_port_by_key),
+            "local_port_entries": len(local_desc_by_port),
+        }
         return links

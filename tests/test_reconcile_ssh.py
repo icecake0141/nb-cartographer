@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import patch
 
 from nbcart.reconcile.collectors.ssh import SshLldpCollector
+from nbcart.reconcile.errors import ReconcileError
 
 
 class SshCollectorTests(unittest.TestCase):
@@ -49,9 +50,113 @@ class SshCollectorTests(unittest.TestCase):
         used_cmd = run_mock.call_args[0][0]
         self.assertEqual(used_cmd[-1], "show lldp neighbors detail")
 
+    @patch("nbcart.reconcile.collectors.ssh.subprocess.run")
+    def test_collect_uses_cisco_nxos_vendor_parser(self, run_mock):
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = (
+                '{"TABLE_nbor":{"ROW_nbor":[{"l_port_id":"Ethernet1/1","sys_name":"leaf-01",'
+                '"port_id":"Ethernet2/1"}]}}'
+            )
+
+        run_mock.return_value = Result()
+        collector = SshLldpCollector()
+        links = collector.collect(
+            seed_device="spine-01",
+            params={"host": "192.0.2.20", "username": "netops", "vendor": "cisco_nxos"},
+        )
+        self.assertEqual(len(links), 1)
+        used_cmd = run_mock.call_args[0][0]
+        self.assertEqual(used_cmd[-1], "show lldp neighbors detail | json")
+
+    @patch("nbcart.reconcile.collectors.ssh.subprocess.run")
+    def test_collect_uses_juniper_junos_vendor_parser(self, run_mock):
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = (
+                '{"lldp-neighbors-information":[{"lldp-neighbor-information":[{'
+                '"lldp-local-port-id":[{"data":"ge-0/0/1"}],'
+                '"lldp-remote-system-name":[{"data":"leaf-01"}],'
+                '"lldp-remote-port-id":[{"data":"Ethernet1/1"}]'
+                "}]}]}"
+            )
+
+        run_mock.return_value = Result()
+        collector = SshLldpCollector()
+        links = collector.collect(
+            seed_device="spine-01",
+            params={"host": "192.0.2.20", "username": "netops", "vendor": "juniper_junos"},
+        )
+        self.assertEqual(len(links), 1)
+        used_cmd = run_mock.call_args[0][0]
+        self.assertEqual(used_cmd[-1], "show lldp neighbors detail | display json")
+
+    @patch("nbcart.reconcile.collectors.ssh.subprocess.run")
+    def test_collect_uses_arista_vendor_parser(self, run_mock):
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = (
+                '{"lldpNeighbors":[{"port":"Ethernet1","neighborDevice":"leaf-01",'
+                '"neighborPort":"Ethernet2"}]}'
+            )
+
+        run_mock.return_value = Result()
+        collector = SshLldpCollector()
+        links = collector.collect(
+            seed_device="spine-01",
+            params={"host": "192.0.2.20", "username": "netops", "vendor": "arista_eos"},
+        )
+        self.assertEqual(len(links), 1)
+        self.assertEqual(collector.last_metadata["parser"], "vendor::arista_eos")
+        used_cmd = run_mock.call_args[0][0]
+        self.assertEqual(used_cmd[-1], "show lldp neighbors detail | json")
+
+    @patch("nbcart.reconcile.collectors.ssh.subprocess.run")
+    def test_collect_uses_fortiswitch_vendor_parser(self, run_mock):
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = "Local Interface: port1\nSystem Name: leaf-01\nRemote Interface: port2\n----\n"
+
+        run_mock.return_value = Result()
+        collector = SshLldpCollector()
+        links = collector.collect(
+            seed_device="fsw-core",
+            params={
+                "host": "192.0.2.30",
+                "username": "admin",
+                "vendor": "fortinet_fortiswitch_os",
+            },
+        )
+        self.assertEqual(len(links), 1)
+        used_cmd = run_mock.call_args[0][0]
+        self.assertEqual(used_cmd[-1], "get switch lldp neighbors detail")
+
+    @patch("nbcart.reconcile.collectors.ssh.subprocess.run")
+    def test_collect_accepts_foritnet_alias_vendor_name(self, run_mock):
+        class Result:
+            returncode = 0
+            stderr = ""
+            stdout = "Local Interface: port1\nSystem Name: leaf-01\nRemote Interface: port2\n----\n"
+
+        run_mock.return_value = Result()
+        collector = SshLldpCollector()
+        links = collector.collect(
+            seed_device="fsw-core",
+            params={
+                "host": "192.0.2.30",
+                "username": "admin",
+                "vendor": "foritnet_fortiswitch_os",
+            },
+        )
+        self.assertEqual(len(links), 1)
+
     def test_collect_rejects_unknown_vendor_profile(self):
         collector = SshLldpCollector()
-        with self.assertRaisesRegex(ValueError, "Unsupported SSH vendor profile"):
+        with self.assertRaisesRegex(ReconcileError, "Unsupported SSH vendor profile"):
             collector.collect(
                 seed_device="spine-01",
                 params={"host": "192.0.2.20", "username": "netops", "vendor": "unknown-os"},

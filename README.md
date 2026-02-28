@@ -114,6 +114,11 @@ curl -X POST -H "Content-Type: application/json" \
   }' \
   http://127.0.0.1:8000/api/reconcile/compare
 
+# Optional: improve matching when LLDP reports mgmt/chassis instead of system-name
+# "identity_hints": {
+#   "sw2": { "mgmt_ips": ["192.0.2.2"], "chassis_ids": ["aa:bb:cc:dd:ee:ff"] }
+# }
+
 # Persisted run with SNMP (recommended: use environment reference)
 curl -X POST -H "Content-Type: application/json" \
   -d '{
@@ -138,6 +143,9 @@ curl -X POST -H "Content-Type: application/json" \
 curl -X POST "http://127.0.0.1:8000/api/reconcile-runs/1/execute?async=true"
 curl "http://127.0.0.1:8000/api/reconcile-runs/1"
 ```
+
+Supported SSH vendor profiles: `arista_eos`, `cisco_ios`, `cisco_nxos`, `juniper_junos`, `fortinet_fortiswitch_os`.
+Reconcile error responses may include `error_code`, `stage`, and `hint` for faster troubleshooting.
 
 ### Directory Structure
 

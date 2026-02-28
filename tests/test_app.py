@@ -722,6 +722,57 @@ class UploadSecurityTests(unittest.TestCase):
         self.assertEqual(summary["matched_count"], 1)
         self.assertEqual(summary["missing_count"], 0)
         self.assertEqual(summary["unexpected_count"], 0)
+        collection = compare_body["report"]["collection"]
+        self.assertEqual(collection["method"], "payload")
+        self.assertEqual(collection["parser"], "payload_direct")
+
+    def test_api_reconcile_compare_identity_hints_match_mgmt_ip(self):
+        csv_bytes = (
+            "Termination A Device,Termination A Name,Termination B Device,Termination B Name,Type\n"
+            "sw1,xe-0/0/1,sw2,xe-0/0/2,Cat6\n"
+        ).encode("utf-8")
+        create_resp = self.client.post(
+            "/api/imports",
+            data={"csv_file": (io.BytesIO(csv_bytes), "api-reconcile-hints.csv")},
+            content_type="multipart/form-data",
+        )
+        body = create_resp.get_json()
+        self.assertIsNotNone(body)
+        assert body is not None
+        import_id = body["import_id"]
+        self.client.put(
+            f"/api/imports/{import_id}/mapping",
+            json={"mapping": body["mapping_candidates"]},
+        )
+        self.client.post(f"/api/imports/{import_id}/execute")
+
+        compare_resp = self.client.post(
+            "/api/reconcile/compare",
+            json={
+                "import_id": import_id,
+                "method": "payload",
+                "params": {
+                    "neighbors": [
+                        {
+                            "local_device": "sw1",
+                            "local_interface": "xe-0/0/1",
+                            "remote_device": "192.0.2.2",
+                            "remote_interface": "xe-0/0/2",
+                        }
+                    ],
+                    "identity_hints": {"sw2": {"mgmt_ips": ["192.0.2.2"]}},
+                },
+            },
+        )
+        self.assertEqual(compare_resp.status_code, 200)
+        compare_body = compare_resp.get_json()
+        self.assertIsNotNone(compare_body)
+        assert compare_body is not None
+        summary = compare_body["report"]["summary"]
+        self.assertEqual(summary["matched_count"], 1)
+        self.assertEqual(summary["missing_count"], 0)
+        self.assertEqual(summary["unexpected_count"], 0)
+        self.assertEqual(compare_body["report"]["collection"]["identity_alias_count"], 2)
 
     def test_api_reconcile_compare_supports_ssh_neighbors_param(self):
         csv_bytes = (
@@ -761,6 +812,10 @@ class UploadSecurityTests(unittest.TestCase):
             },
         )
         self.assertEqual(compare_resp.status_code, 200)
+        body = compare_resp.get_json()
+        self.assertIsNotNone(body)
+        assert body is not None
+        self.assertEqual(body["report"]["collection"]["parser"], "neighbors_payload")
 
     def test_api_reconcile_compare_rejects_ssh_without_command_or_vendor(self):
         csv_bytes = (
@@ -792,6 +847,47 @@ class UploadSecurityTests(unittest.TestCase):
             },
         )
         self.assertEqual(compare_resp.status_code, 400)
+
+    def test_api_reconcile_compare_returns_structured_error_for_unknown_vendor(self):
+        csv_bytes = (
+            "Termination A Device,Termination A Name,Termination B Device,Termination B Name,Type\n"
+            "sw1,xe-0/0/1,sw2,xe-0/0/2,Cat6\n"
+        ).encode("utf-8")
+        create_resp = self.client.post(
+            "/api/imports",
+            data={"csv_file": (io.BytesIO(csv_bytes), "api-reconcile-err-ssh.csv")},
+            content_type="multipart/form-data",
+        )
+        body = create_resp.get_json()
+        self.assertIsNotNone(body)
+        assert body is not None
+        import_id = body["import_id"]
+        self.client.put(
+            f"/api/imports/{import_id}/mapping",
+            json={"mapping": body["mapping_candidates"]},
+        )
+        self.client.post(f"/api/imports/{import_id}/execute")
+
+        compare_resp = self.client.post(
+            "/api/reconcile/compare",
+            json={
+                "import_id": import_id,
+                "method": "ssh",
+                "seed_device": "sw1",
+                "params": {
+                    "host": "192.0.2.20",
+                    "username": "netops",
+                    "vendor": "unknown-os",
+                },
+            },
+        )
+        self.assertEqual(compare_resp.status_code, 422)
+        payload = compare_resp.get_json()
+        self.assertIsNotNone(payload)
+        assert payload is not None
+        self.assertIn("error_code", payload)
+        self.assertEqual(payload["error_code"], "unsupported_vendor_profile")
+        self.assertEqual(payload["stage"], "collect.ssh.profile")
 
     def test_api_reconcile_execute_async_completes_in_background(self):
         csv_bytes = (
@@ -860,6 +956,8 @@ class UploadSecurityTests(unittest.TestCase):
         vendors = body["vendors"]
         self.assertTrue(any(v["name"] == "cisco_ios" for v in vendors))
         self.assertTrue(any(v["name"] == "juniper_junos" for v in vendors))
+        self.assertTrue(any(v["name"] == "arista_eos" for v in vendors))
+        self.assertTrue(any(v["name"] == "fortinet_fortiswitch_os" for v in vendors))
 
 
 if __name__ == "__main__":
