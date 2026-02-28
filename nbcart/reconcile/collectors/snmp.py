@@ -15,6 +15,22 @@ IF_NAME_OID = ".1.3.6.1.2.1.31.1.1.1.1"
 
 class SnmpLldpCollector:
     @staticmethod
+    def _int_param(params: dict[str, object], key: str, default: int) -> int:
+        value = params.get(key, default)
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                return default
+        return default
+
+    @staticmethod
     def _resolve_community(params: dict[str, object]) -> str:
         direct = str(params.get("community", "")).strip()
         if direct:
@@ -83,9 +99,9 @@ class SnmpLldpCollector:
     def collect(self, *, seed_device: str, params: dict[str, object]) -> list[LinkRecord]:
         host = str(params.get("host", "")).strip()
         community = self._resolve_community(params)
-        timeout = int(params.get("timeout", 2))
-        retries = int(params.get("retries", 1))
-        port = int(params.get("port", 161))
+        timeout = self._int_param(params, "timeout", 2)
+        retries = self._int_param(params, "retries", 1)
+        port = self._int_param(params, "port", 161)
 
         if not host:
             raise ValueError("params.host is required for snmp method.")

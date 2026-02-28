@@ -17,6 +17,22 @@ SSH_VENDOR_PROFILES: dict[str, dict[str, str]] = {
 
 class SshLldpCollector:
     @staticmethod
+    def _int_param(params: dict[str, object], key: str, default: int) -> int:
+        value = params.get(key, default)
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                return default
+        return default
+
+    @staticmethod
     def _pick(item: dict[str, object], keys: list[str]) -> str:
         for key in keys:
             value = item.get(key)
@@ -238,7 +254,7 @@ class SshLldpCollector:
         username = str(params.get("username", "")).strip()
         command = str(params.get("command", "")).strip()
         vendor = str(params.get("vendor", "")).strip().lower()
-        timeout = int(params.get("timeout", 10))
+        timeout = self._int_param(params, "timeout", 10)
 
         if not host:
             raise ValueError("params.host is required for ssh method.")
