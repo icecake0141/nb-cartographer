@@ -318,6 +318,11 @@ Fallback runtime target: `static/`
 - Frontend rendering: Cytoscape.js / elkjs
 - To add more column-name rules, update `choose_columns()` in `app.py`.
 
+### Reconcile TODO
+
+- Validate SSH reconcile behavior on actual devices per vendor profile.
+- Split and tighten vendor-specific SSH output parsers where false positives are observed.
+
 ---
 
 ## 日本語訳
@@ -540,3 +545,8 @@ npm run frontend:build
 - バックエンド: Flask 3.1
 - フロント描画: Cytoscape.js / elkjs
 - 列名ルールを増やす場合は `app.py` の `choose_columns()` を更新してください
+
+### Reconcile ToDo
+
+- ベンダプロファイルごとに実機で SSH 比較動作を検証する
+- 誤検知が出る場合は、ベンダ別 SSH 出力パーサをさらに分離・厳密化する
