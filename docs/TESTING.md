@@ -1,31 +1,80 @@
-# テスト / Lint / Format
+# Testing / Lint / Format
 
-## 開発依存のインストール
+## English
+
+### Install Development Dependencies
 
 ```bash
 source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
-## テスト
+### Test
 
 ```bash
 pytest -q
 ```
 
-## Lint
+### Lint
 
 ```bash
 ruff check .
 ```
 
-## Format
+### Format
 
 ```bash
 ruff format .
 ```
 
-## API スモークテスト
+### API Smoke Test
+
+```bash
+# 1) Create import run
+curl -X POST -F "csv_file=@samples/netbox_cables.csv" http://127.0.0.1:8000/api/imports
+
+# 2) Execute
+curl -X POST http://127.0.0.1:8000/api/imports/<id>/execute
+
+# 3) Get graph
+curl "http://127.0.0.1:8000/api/graphs/<id>?view=device"
+```
+
+### Test Files
+
+- Public sample: `samples/netbox_cables.csv`
+- Local import destination: `import/` (excluded by `.gitignore`)
+
+---
+
+## 日本語訳
+
+### 開発依存のインストール
+
+```bash
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+```
+
+### テスト
+
+```bash
+pytest -q
+```
+
+### Lint
+
+```bash
+ruff check .
+```
+
+### Format
+
+```bash
+ruff format .
+```
+
+### API スモークテスト
 
 ```bash
 # 1) import run を作成
@@ -38,7 +87,7 @@ curl -X POST http://127.0.0.1:8000/api/imports/<id>/execute
 curl "http://127.0.0.1:8000/api/graphs/<id>?view=device"
 ```
 
-## テスト用ファイル
+### テスト用ファイル
 
 - 公開サンプル: `samples/netbox_cables.csv`
 - ローカル投入先: `import/`（`.gitignore` で除外）
