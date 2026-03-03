@@ -1,5 +1,11 @@
 # nb-cartographer Redesign Plan
 
+## Status
+
+- This is a redesign planning document.
+- Some items are historical proposals and may differ from the current implementation.
+- For current behavior, refer to `README.md`, `docs/SPEC.md`, and `docs/MIGRATIONS.md`.
+
 ## Goals
 
 - Separate CSV ingestion, domain normalization, and presentation/export concerns.
@@ -175,6 +181,12 @@ nb-cartographer/
 ---
 
 ## 日本語訳
+
+### ステータス
+
+- 本書は再設計の計画文書です。
+- 一部項目は当時の提案であり、現在の実装と差分がある場合があります。
+- 現行仕様は `README.md`、`docs/SPEC.md`、`docs/MIGRATIONS.md` を参照してください。
 
 ### 目的
 
