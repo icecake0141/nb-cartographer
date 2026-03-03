@@ -15,6 +15,12 @@ pip install -r requirements-dev.txt
 pytest -q
 ```
 
+If imports fail (for example `ModuleNotFoundError: app`), run:
+
+```bash
+PYTHONPATH=. pytest -q
+```
+
 ### Lint
 
 ```bash
@@ -60,6 +66,12 @@ pip install -r requirements-dev.txt
 
 ```bash
 pytest -q
+```
+
+import で失敗する場合（例: `ModuleNotFoundError: app`）は、次を実行してください:
+
+```bash
+PYTHONPATH=. pytest -q
 ```
 
 ### Lint
